@@ -11,6 +11,24 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        
+      - name: Verify time zone
+        run: |
+          if ! timedatectl list-timezones | grep -q "${TZ}"; then
+            echo "Invalid time zone: ${TZ}"
+            exit 1
+          fi
+
+      - name: Install time zone
+        run: |
+          if ! timedatectl list-timezones | grep -q "${TZ}"; then
+            sudo apt-get update
+            sudo apt-get install -y tzdata
+          fi
+
+      - name: Set time zone
+        run: |
+          sudo timedatectl set-timezone "${TZ}"
 
       - name: Initialization environment
         id: init
