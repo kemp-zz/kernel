@@ -12,11 +12,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         
-      - name: Set time zone
-        uses: shivammathur/run-as-action@v2
-        with:
-          user: root
-          cmd: timedatectl set-timezone "${TZ}"
+
 
       - name: Initialization environment
         id: init
