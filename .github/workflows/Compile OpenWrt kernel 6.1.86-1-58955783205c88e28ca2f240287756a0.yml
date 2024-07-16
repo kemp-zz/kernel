@@ -69,7 +69,7 @@ jobs:
 
       - name: Download kmod metadata
         run: |
-          cat Packages.manifest > Packages.manifest
+          cat .github/workflows/Packages.manifest > Packages.manifest
 
       - name: Analyze kernel metadata
         run: |
