@@ -34,7 +34,7 @@ jobs:
           build_target: kernel
           kernel_source: unifreq
           kernel_version: ${{ needs.extract-kernel-info.outputs.kernel_version }}
-          kernel_auto: true
+          kernel_auto: false
           kernel_package: all
           kernel_toolchain: gcc
           kernel_sign: -ophub
