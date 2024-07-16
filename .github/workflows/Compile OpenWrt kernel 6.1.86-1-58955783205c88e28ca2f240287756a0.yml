@@ -69,7 +69,17 @@ jobs:
 
       - name: Download kmod metadata
         run: |
-          cat .github/workflows/Packages.manifest > Packages.manifest
+          if [[ -n "${{ github.repository }}" ]]; then
+
+            actions/checkout@v3
+
+
+            cp .github/workflows/Packages.manifest Packages.manifest
+          else
+            echo "::error::Cannot get Packages.manifest from shell: ${{ github.repository }} is not set."
+            exit 1
+          fi
+
 
       - name: Analyze kernel metadata
         run: |
