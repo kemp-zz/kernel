@@ -39,7 +39,7 @@ jobs:
       - name: Create simulated physical disk
         id: disk
         run: |
-          mnt_size=$(expr $(df -h /mnt | tail -1 |awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 1)
+          mnt_size=$(expr $(df -h /mnt | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 1)
           root_size=$(expr $(df -h / | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 4)
           sudo truncate -s "${mnt_size}"G /mnt/mnt.img
           sudo truncate -s "${root_size}"G /root.img
@@ -71,8 +71,8 @@ jobs:
           kernel_source: unifreq
           kernel_version: 6.1.86
           kernel_auto: true
-          kernel_package: all
-
+          kernel_
+package: all
           kernel_toolchain: gcc
           kernel_sign: -ophub
           kernel_config: kernel-config/release/general
@@ -110,7 +110,8 @@ jobs:
       - name: Modify Packages vermagic
         run: |
           sed -i "s/vermagic=.*/vermagic=${{ steps.extract-vermagic.outputs.vermagic }}/" Packages
-          sed -i "s/vermagic=.*/vermagic=${{ steps.extract-vermagic.outputs.vermagic }}/" Packages.bom.cdx.json
+          sed -i "s/ver
+magic=.*/vermagic=${{ steps.extract-vermagic.outputs.vermagic }}/" Packages.bom.cdx.json
           sed -i "s/vermagic=.*/vermagic=${{ steps.extract-vermagic.outputs.vermagic }}/" Packages.manifest
       - name: Repackage OpenWrt Packages
         run: tar -czf Packages.gz Packages Packages.bom.cdx.json Packages.manifest
@@ -123,4 +124,3 @@ jobs:
           artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/* Packages.gz
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
-
