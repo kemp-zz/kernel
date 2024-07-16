@@ -71,8 +71,7 @@ jobs:
           kernel_source: unifreq
           kernel_version: 6.1.86
           kernel_auto: true
-          kernel_
-package: all
+          kernel_package: all
           kernel_toolchain: gcc
           kernel_sign: -ophub
           kernel_config: kernel-config/release/general
