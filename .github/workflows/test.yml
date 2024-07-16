@@ -72,7 +72,19 @@ jobs:
           name: kmod-metadata
           path: ./
           url: https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages
+
+      - name: Download kmod metadata
+        uses: actions/download-artifact@v2
+        with:
+          name: kmod-metadata
+          path: ./
           url: https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.bom.cdx.json
+          
+      - name: Download kmod metadata
+        uses: actions/download-artifact@v2
+        with:
+          name: kmod-metadata
+          path: ./
           url: https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.manifest
 
       - name: Extract vermagic from kmod metadata
