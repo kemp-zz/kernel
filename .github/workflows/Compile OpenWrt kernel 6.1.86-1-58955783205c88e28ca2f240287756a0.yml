@@ -1,7 +1,5 @@
 name: Compile OpenWrt kernel 6.1.86-1-58955783205c88e28ca2f240287756a0
 
-
-
 on:
   repository_dispatch:
   workflow_dispatch:
@@ -71,7 +69,7 @@ jobs:
 
       - name: Download kmod metadata
         run: |
-          curl -o Packages.manifest https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.manifest
+          cat Packages.manifest > Packages.manifest
 
       - name: Analyze kernel metadata
         run: |
@@ -99,8 +97,8 @@ jobs:
 
       - name: Generate OpenWrt kernel image
         run: |
-          make INSTALL_HDR_PATH=output ARCH=arm64 INSTALL_MOD_PATH=output/modules dtbs KCONFIG_CONFIG=kernel-config/release/openwrt INSTALL_DTBS_PATH=output/dtbs INSTALL_VMLINUZ_PATH=output/vmlinuz modules_install install dtbs install vmlinuz_install
-
+         make INSTALL_HDR_PATH=output ARCH=arm64 INSTALL_MOD_PATH=output/modules dtbs KCONFIG_CONFIG=kernel-config/release/openwrt INSTALL_DTBS_PATH=output/dtbs INSTALL_VMLINUZ_PATH=output/vmlinuz modules_install install dtbs install vmlinuz_install KVERSION=${{ needs.analyze_metadata.outputs.kernel_version }}
+         
       - name: Upload Kernel to Release
         uses: ncipollo/release-action@main
         if: ${{ env.PACKAGED_STATUS }} == 'success' && !cancelled()
@@ -109,4 +107,3 @@ jobs:
           artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
-
