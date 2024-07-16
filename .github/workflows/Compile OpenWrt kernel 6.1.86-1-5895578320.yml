@@ -110,8 +110,7 @@ jobs:
       - name: Modify Packages vermagic
         run: |
           sed -i "s/vermagic=.*/vermagic=${{ steps.extract-vermagic.outputs.vermagic }}/" Packages
-          sed -i "s/vermagic=.*/ver
-magic=${{ steps.extract-vermagic.outputs.vermagic }}/" Packages.bom.cdx.json
+          sed -i "s/vermagic=.*/vermagic=${{ steps.extract-vermagic.outputs.vermagic }}/" Packages.bom.cdx.json
           sed -i "s/vermagic=.*/vermagic=${{ steps.extract-vermagic.outputs.vermagic }}/" Packages.manifest
       - name: Repackage OpenWrt Packages
         run: tar -czf Packages.gz Packages Packages.bom.cdx.json Packages.manifest
