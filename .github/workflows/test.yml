@@ -72,27 +72,20 @@ jobs:
       - name: Download kmod metadata
         run: |
          
-          curl -o kmod-metadata/Packages.gz https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages
-           
-          curl -o kmod-metadata/Packages.bom.cdx.json https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.bom.cdx.json
-          
           curl -o kmod-metadata/Packages.manifest https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.manifest
-      - name: Extract vermagic
+          curl -o kmod-metadata/Packages.bom.cdx.json https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.bom.cdx.json
+
+          # Delete the downloaded Packages.gz file
+          rm kmod-metadata/Packages.gz
+          
+      - name: Extract vermagic and kernel version
+        id: extract_vermagic
         run: |
-          if [ -f "kmod-metadata/Packages" ]; then
-            echo "Packages file found!"
-            vermagic=$(grep -oP 'vermagic="\K[^"]+' kmod-metadata/Packages)
-            if [ $? -eq 0 ]; then
-              echo "::set-output name=vermagic::$vermagic"
-            else
-              echo "Error: Failed to extract vermagic value."
-              exit 1
-            fi
-          else
-            echo "Error: Packages file not found."
-            exit 1
-          fi
-        shell: /usr/bin/bash -e {0}
+         vermagic=$(grep -oP 'vermagic="\K[^"]+' kmod-metadata/Packages)
+         kernel_version=$(grep -oP 'Version: \K[^"]+' kmod-metadata/Packages)
+         echo "::set-output name=vermagic::$vermagic"
+         echo "::set-output name=kernel_version::$kernel_version"
+
 
 
       - name: Modify kernel source vermagic
@@ -112,8 +105,3 @@ jobs:
           artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          body: |
-            - The kernel can be used to compile Armbian and OpenWrt.
-            - The kernel source code comes from: unifreq
-            - The kernel compilation toolchain: gcc
-            - This is a `stable` kernel, which can be used in Armbian and OpenWrt.
