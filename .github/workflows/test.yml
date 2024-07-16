@@ -74,8 +74,9 @@ jobs:
       - name: Extract kmod metadata
         id: extract_kmod_metadata
         run: |
-          zcat Packages.gz | grep -oP 'vermagic="\K[^"]+' > vermagic.txt
-          zcat Packages.gz | grep -oP 'Version: \K[^"]+' > kernel_version.txt
+         zcat Packages.gz | awk '/vermagic/{print $2}' > vermagic.txt
+         zcat Packages.gz | awk '/Version:/{print $2}' > kernel_version.txt
+
 
       - name: Print kmod metadata
         run: |
