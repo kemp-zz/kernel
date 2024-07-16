@@ -69,15 +69,12 @@ jobs:
 
       - name: Download kmod metadata
         run: |
-          curl -o Packages  https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages
-
-      - name: Download kmod metadata
-        run: |
-          curl -o Packages  https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.bom.cdx.json
+          mkdir kmod-metadata
+          curl -o kmod-metadata/Packages  https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages
+           
+          curl -o kmod-metadata/Packages  https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.bom.cdx.json
           
-      - name: Download kmod metadata
-        run: |
-          curl -o Packages  https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.manifest
+          curl -o kmod-metadata/Packages  https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.manifest
 
       - name: Extract vermagic from kmod metadata
         id: extract-vermagic
