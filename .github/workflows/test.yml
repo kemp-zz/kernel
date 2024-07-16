@@ -72,7 +72,7 @@ jobs:
       - name: Download kmod metadata
         run: |
          
-          curl -o kmod-metadata/Packages.gz https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.gz
+          curl -o kmod-metadata/Packages.gz https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages
            
           curl -o kmod-metadata/Packages.bom.cdx.json https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.bom.cdx.json
           
