@@ -36,7 +36,6 @@ jobs:
           sudo rm -rf ~/{.cargo,.dotnet,.rustup}
           sudo timedatectl set-timezone "${TZ}"
           echo "status=success" >> ${GITHUB_OUTPUT}
-
       - name: Create simulated physical disk
         id: disk
         run: |
@@ -55,7 +54,6 @@ jobs:
           sudo mount /dev/github/runner /builder
           sudo chown -R runner.runner /builder
           df -Th
-
   
       - name: Create a mapped directory
         id: mapped
@@ -66,21 +64,19 @@ jobs:
           ln -sf /builder/kernel /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/kernel
           ln -sf /builder/output /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/output
           echo "status=success" >> ${GITHUB_OUTPUT}
-
       - name: Download kmod metadata
         run: |
           mkdir kmod-metadata
-          curl -o kmod-metadata/Packages  https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.gz
+          curl -o kmod-metadata/Packages.gz https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.gz
            
-          curl -o kmod-metadata/Packages  https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.bom.cdx.json
+          curl -o kmod-metadata/Packages.bom.cdx.json https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.bom.cdx.json
           
-          curl -o kmod-metadata/Packages  https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.manifest
-
+          curl -o kmod-metadata/Packages.manifest https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.manifest
       - name: Extract vermagic
         run: |
           if [ -f "kmod-metadata/Packages" ]; then
             echo "Packages file found!"
-            vermagic=$(grep -oP 'vermagic="\K.*"' kmod-metadata/Packages)
+            vermagic=$(grep -oP 'vermagic="\K[^"]+' kmod-metadata/Packages)
             if [ $? -eq 0 ]; then
               echo "::set-output name=vermagic::$vermagic"
             else
@@ -97,14 +93,12 @@ jobs:
       - name: Modify kernel source vermagic
         run: |
           sed -i "s/CONFIG_LOCALVERSION=\"\(.*\)\"/CONFIG_LOCALVERSION=\"-${vermagic}\"/" Makefile
-
       - name: Recompile kernel
         run: make -j$(nproc)
 
       - name: Generate OpenWrt kernel image
         run: |
           make INSTALL_HDR_PATH=output ARCH=arm64 INSTALL_MOD_PATH=output/modules dtbs KCONFIG_CONFIG=kernel-config/release/openwrt INSTALL_DTBS_PATH=output/dtbs INSTALL_VMLINUZ_PATH=output/vmlinuz modules_install install dtbs install vmlinuz_install
-
       - name: Upload Kernel to Release
         uses: ncipollo/release-action@main
         if: ${{ env.PACKAGED_STATUS }} == 'success' && !cancelled()
