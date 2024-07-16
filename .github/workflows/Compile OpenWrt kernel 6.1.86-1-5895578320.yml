@@ -1,12 +1,12 @@
-name: Compile OpenWrt kernel 6.1.86-1-5895578320
+name: Compile OpenWrt kernel 6.1.86-1-58955783205c88e28ca2f240287756a0
 
 on:
   repository_dispatch:
   workflow_dispatch:
-  
+
 env:
   TZ: America/New_York
-  
+
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -39,7 +39,7 @@ jobs:
       - name: Create simulated physical disk
         id: disk
         run: |
-          mnt_size=$(expr $(df -h /mnt | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 1)
+          mnt_size=$(expr $(df -h /mnt | tail -1 |awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 1)
           root_size=$(expr $(df -h / | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 4)
           sudo truncate -s "${mnt_size}"G /mnt/mnt.img
           sudo truncate -s "${root_size}"G /root.img
@@ -69,9 +69,10 @@ jobs:
         with:
           build_target: kernel
           kernel_source: unifreq
-          kernel_version: 6.1.y
+          kernel_version: 6.1.86
           kernel_auto: true
           kernel_package: all
+
           kernel_toolchain: gcc
           kernel_sign: -ophub
           kernel_config: kernel-config/release/general
@@ -100,7 +101,6 @@ jobs:
       - name: Generate OpenWrt kernel image
         run: |
           make INSTALL_HDR_PATH=output ARCH=arm64 INSTALL_MOD_PATH=output/modules dtbs KCONFIG_CONFIG=kernel-config/release/openwrt INSTALL_DTBS_PATH=output/dtbs INSTALL_VMLINUZ_PATH=output/vmlinuz modules_install install dtbs install vmlinuz_install
-
       - name: Download OpenWrt Packages
         run: wget https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.gz
 
@@ -110,9 +110,9 @@ jobs:
       - name: Modify Packages vermagic
         run: |
           sed -i "s/vermagic=.*/vermagic=${{ steps.extract-vermagic.outputs.vermagic }}/" Packages
-          sed -i "s/vermagic=.*/vermagic=${{ steps.extract-vermagic.outputs.vermagic }}/" Packages.bom.cdx.json
+          sed -i "s/vermagic=.*/ver
+magic=${{ steps.extract-vermagic.outputs.vermagic }}/" Packages.bom.cdx.json
           sed -i "s/vermagic=.*/vermagic=${{ steps.extract-vermagic.outputs.vermagic }}/" Packages.manifest
-
       - name: Repackage OpenWrt Packages
         run: tar -czf Packages.gz Packages Packages.bom.cdx.json Packages.manifest
 
@@ -124,8 +124,4 @@ jobs:
           artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/* Packages.gz
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          body: |
-            - The kernel can be used to compile Armbian and OpenWrt.
-            - The kernel source code comes from: unifreq
-            - The kernel compilation toolchain: gcc
-            - This is a `stable` kernel, which can be used in Armbian and OpenWrt. 
+
