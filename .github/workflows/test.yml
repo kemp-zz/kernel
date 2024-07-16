@@ -1,7 +1,4 @@
-Based on the provided `Packages.manifest` file, I will help you rewrite the Actions code to analyze the kernel version, release version, and MD5, and then re-generate a corresponding kernel.
 
-Here is the rewritten Actions code:
-```yaml
 name: test
 
 on:
@@ -67,5 +64,3 @@ jobs:
           artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
-```
-Note that I have omitted some steps and code blocks to focus on the analysis of the `Packages.manifest` file and re-compiling the kernel. You may need to adjust the code according to your specific requirements.
