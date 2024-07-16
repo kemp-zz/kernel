@@ -1,4 +1,4 @@
-name: test Compile OpenWrt kernel 6.1.86
+name: test
 
 on:
   repository_dispatch:
