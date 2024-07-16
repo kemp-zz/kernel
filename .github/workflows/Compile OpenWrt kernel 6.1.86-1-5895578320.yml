@@ -15,8 +15,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         
-
-
       - name: Initialization environment
         id: init
         env:
@@ -38,7 +36,6 @@ jobs:
           sudo rm -rf ~/{.cargo,.dotnet,.rustup}
           sudo timedatectl set-timezone "${TZ}"
           echo "status=success" >> ${GITHUB_OUTPUT}
-
       - name: Create simulated physical disk
         id: disk
         run: |
@@ -57,7 +54,6 @@ jobs:
           sudo mount /dev/github/runner /builder
           sudo chown -R runner.runner /builder
           df -Th
-
       - name: Create a mapped directory
         id: mapped
         working-directory: /builder
@@ -67,7 +63,6 @@ jobs:
           ln -sf /builder/kernel /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/kernel
           ln -sf /builder/output /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/output
           echo "status=success" >> ${GITHUB_OUTPUT}
-
       - name: Compile the kernel [ 6.1.86 ]
         uses: ophub/amlogic-s9xxx-armbian@main
         if: ${{ steps.mapped.outputs.status }} == 'success' && !cancelled()
@@ -96,11 +91,9 @@ jobs:
         run: |
           vermagic=$(grep -oP 'vermagic="\K.*"' openwrt-kmods/*/*.ko | head -n1)
           echo "::set-output name=vermagic::$vermagic"
-
       - name: Modify kernel source vermagic
         run: |
           sed -i "s/CONFIG_LOCALVERSION=\"\(.*\)\"/CONFIG_LOCALVERSION=\"-${vermagic}\"/" Makefile
-
       - name: Recompile kernel
         run: make -j$(nproc)
 
@@ -108,16 +101,31 @@ jobs:
         run: |
           make INSTALL_HDR_PATH=output ARCH=arm64 INSTALL_MOD_PATH=output/modules dtbs KCONFIG_CONFIG=kernel-config/release/openwrt INSTALL_DTBS_PATH=output/dtbs INSTALL_VMLINUZ_PATH=output/vmlinuz modules_install install dtbs install vmlinuz_install
 
+      - name: Download OpenWrt Packages
+        run: wget https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.gz
+
+      - name: Unzip OpenWrt Packages
+        run: tar -xf Packages.gz
+
+      - name: Modify Packages vermagic
+        run: |
+          sed -i "s/vermagic=.*/vermagic=${{ steps.extract-vermagic.outputs.vermagic }}/" Packages
+          sed -i "s/vermagic=.*/vermagic=${{ steps.extract-vermagic.outputs.vermagic }}/" Packages.bom.cdx.json
+          sed -i "s/vermagic=.*/vermagic=${{ steps.extract-vermagic.outputs.vermagic }}/" Packages.manifest
+
+      - name: Repackage OpenWrt Packages
+        run: tar -czf Packages.gz Packages Packages.bom.cdx.json Packages.manifest
+
       - name: Upload Kernel to Release
         uses: ncipollo/release-action@main
         if: ${{ env.PACKAGED_STATUS }} == 'success' && !cancelled()
         with:
           tag: kernel_stable
-          artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
+          artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/* Packages.gz
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
           body: |
             - The kernel can be used to compile Armbian and OpenWrt.
             - The kernel source code comes from: unifreq
             - The kernel compilation toolchain: gcc
-            - This is a `stable` kernel, which can be used in Armbian and OpenWrt.
+            - This is a `stable` kernel, which can be used in Armbian and OpenWrt. 
