@@ -64,9 +64,14 @@ jobs:
           ln -sf /builder/kernel /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/kernel
           ln -sf /builder/output /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/output
           echo "status=success" >> ${GITHUB_OUTPUT}
+          
+      - name: Create kmod-metadata directory
+        run: |
+           mkdir kmod-metadata
+           
       - name: Download kmod metadata
         run: |
-          mkdir kmod-metadata
+         
           curl -o kmod-metadata/Packages.gz https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.gz
            
           curl -o kmod-metadata/Packages.bom.cdx.json https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.bom.cdx.json
