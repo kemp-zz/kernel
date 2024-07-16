@@ -29,7 +29,7 @@ jobs:
           sudo -E apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
           sudo -E apt-get -y install $(curl -fsSL https://is.gd/depend_ubuntu2204_armbian)
           sudo -E systemctl daemon-reload
-          #sudo -E apt-get -y full-upgrade
+           #sudo -E apt-get -y full-upgrade
           sudo -E apt-get -y autoremove --purge
           sudo -E apt-get clean
           sudo sed -i '/NVM_DIR/d;/skel/d' /root/{.bashrc,.profile}
@@ -60,51 +60,35 @@ jobs:
         working-directory: /builder
         run: |
           df -hT ${PWD}
-          mkdir -p /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel
-          ln -sf /builder/kernel /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/kernel
-          ln -sf /builder/output /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/output
+          mkdir -p /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/config
           echo "status=success" >> ${GITHUB_OUTPUT}
           
       - name: Create kmod-metadata directory
         run: |
            mkdir kmod-metadata
            
-      - name: Download kmod metadata
+      - name: Download Packages.gz
         run: |
-         curl -o kmod-metadata/Packages.gz https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.gz
-         curl -o kmod-metadata/Packages.manifest https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.manifest
-         curl -o kmod-metadata/Packages.bom.cdx.json https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.bom.cdx.json
-
-      - name: Unpack Packages.gz
+          curl -o Packages.gz https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.gz
+           
+      - name: Extract kmod metadata
+        id: extract_kmod_metadata
         run: |
-           gunzip kmod-metadata/Packages.gz
+          zcat Packages.gz | grep -oP 'vermagic="\K[^"]+' > vermagic.txt
+          zcat Packages.gz | grep -oP 'Version: \K[^"]+' > kernel_version.txt
 
-          
-      - name: Extract vermagic and kernel version
-        id: extract_vermagic
+      - name: Print kmod metadata
         run: |
-         vermagic=$(grep -oP 'vermagic="\K[^"]+' kmod-metadata/Packages)
-         kernel_version=$(grep -oP 'Version: \K[^"]+' kmod-metadata/Packages)
-         echo "::set-output name=vermagic::$vermagic"
-         echo "::set-output name=kernel_version::$kernel_version"
-
-
-
-
-      - name: Modify kernel source vermagic
-        run: |
-          sed -i "s/CONFIG_LOCALVERSION=\"\(.*\)\"/CONFIG_LOCALVERSION=\"-${vermagic}\"/" Makefile
+          cat vermagic.txt
+          cat kernel_version.txt
       - name: Recompile kernel
         run: make -j$(nproc)
 
       - name: Generate OpenWrt kernel image
-        run: |
-          make INSTALL_HDR_PATH=output ARCH=arm64 INSTALL_MOD_PATH=output/modules dtbs KCONFIG_CONFIG=kernel-config/release/openwrt INSTALL_DTBS_PATH=output/dtbs INSTALL_VMLINUZ_PATH=output/vmlinuz modules_install install dtbs install vmlinuz_install
+         run: |
+           make INSTALL_HDR_PATH=output ARCH=arm64 INSTALL_MOD_PATH=output/modules dtbs KCONFIG_CONFIG=kernel-config/release/openwrt INSTALL_DTBS_PATH=output/dtbs INSTALL_VMLINUZ_PATH=output/vmlinuz modules_install install dtbs install vmlinuz_install
+
+          
       - name: Upload Kernel to Release
         uses: ncipollo/release-action@main
-        if: ${{ env.PACKAGED_STATUS }} == 'success' && !cancelled()
-        with:
-          tag: kernel_stable
-          artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
-          allowUpdates: true
-          token: ${{ secrets.GITHUB_TOKEN }}
+        if: ${{ env.PACKAGED_STATUS }}
