@@ -76,10 +76,9 @@ jobs:
           
           curl -o kmod-metadata/Packages  https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.manifest
 
-      - name: Extract vermagic from kmod metadata
-        id: extract-vermagic
+      - name: Extract vermagic
         run: |
-          vermagic=$(grep -oP 'vermagic="\K.*"' ./kmod-metadata/Packages)
+          vermagic=$(grep -oP 'vermagic="\K.*"' kmod-metadata/Packages)
           echo "::set-output name=vermagic::$vermagic"
 
       - name: Modify kernel source vermagic
