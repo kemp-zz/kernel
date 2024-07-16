@@ -78,8 +78,13 @@ jobs:
 
       - name: Extract vermagic
         run: |
-          vermagic=$(grep -oP 'vermagic="[[:alnum:]]*"' kmod-metadata/Packages)
-          echo "::set-output name=vermagic::$vermagic"
+          if [ -f "kmod-metadata/Packages" ]; then
+            vermagic=$(grep -oP 'vermagic="\K.*"' kmod-metadata/Packages)
+            echo "::set-output name=vermagic::$vermagic"
+          else
+            echo "Error: Packages file not found."
+            exit 1
+          fi
 
       - name: Modify kernel source vermagic
         run: |
