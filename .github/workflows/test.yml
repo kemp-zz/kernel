@@ -85,7 +85,7 @@ jobs:
         run: make -j$(nproc)
 
       - name: Generate OpenWrt kernel image
-         run: |
+        run: |
            make INSTALL_HDR_PATH=output ARCH=arm64 INSTALL_MOD_PATH=output/modules dtbs KCONFIG_CONFIG=kernel-config/release/openwrt INSTALL_DTBS_PATH=output/dtbs INSTALL_VMLINUZ_PATH=output/vmlinuz modules_install install dtbs install vmlinuz_install
 
           
