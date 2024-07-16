@@ -1,0 +1,42 @@
+name: Rebuild Kernel
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  extract-kernel-info:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: docker/setup-qemu-action@v2
+      - run: |
+          echo "Extracting kernel info from Packages.manifest..."
+          kernel_version=$(cat Packages.manifest | grep 'Version: [0-9.]*' | cut -d ':' -f2 | tr -d ' ')
+          kernel_release=$(cat Packages.manifest | grep 'Release: [0-9]*' | cut -d ':' -f2 | tr -d ' ')
+          md5sum=$(cat Packages.manifest | grep 'MD5Sum: [0-9a-f]*' | cut -d ':' -f2 | tr -d ' ')
+          echo "Kernel version: $kernel_version"
+          echo "Kernel release: $kernel_release"
+          echo "MD5 sum: $md5sum"
+          echo "::set-output name=kernel_version::$kernel_version"
+          echo "::set-output name=kernel_release::$kernel_release"
+          echo "::set-output name=md5sum::$md5sum"
+  rebuild-kernel:
+    needs: extract-kernel-info
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: docker/setup-qemu-action@v2
+      - name: Rebuild kernel with extracted info
+        uses: ophub/amlogic-s9xxx-armbian@main
+        if: ${{ needs.extract-kernel-info.outputs.status }} == 'success' && !cancelled()
+        with:
+          build_target: kernel
+          kernel_source: unifreq
+          kernel_version: ${{ needs.extract-kernel-info.outputs.kernel_version }}
+          kernel_auto: true
+          kernel_package: all
+          kernel_toolchain: gcc
+          kernel_sign: -ophub
+          kernel_config: kernel-config/release/general
+          compress_format: xz
