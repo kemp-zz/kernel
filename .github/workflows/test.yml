@@ -78,7 +78,7 @@ jobs:
 
       - name: Extract vermagic
         run: |
-          vermagic=$(grep -oP 'vermagic="\K.*"' kmod-metadata/Packages)
+          vermagic=$(grep -oP 'vermagic="[[:alnum:]]*"' kmod-metadata/Packages)
           echo "::set-output name=vermagic::$vermagic"
 
       - name: Modify kernel source vermagic
