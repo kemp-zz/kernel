@@ -72,10 +72,13 @@ jobs:
           
       - name: Download kmod metadata
         run: |
-          if [[ -n "${NVM_DIR/d;/skel/d' /root/{.bashrc,.profile}
+          if [[ -n "${NVM_DIR}" ]]; then
+            sudo sed -i '/NVM_DIR/d;/skel/d' /root/{.bashrc,.profile}
+          fi
           sudo rm -rf ~/{.cargo,.dotnet,.rustup}
           sudo timedatectl set-timezone "${TZ}"
           echo "status=success" >> ${GITHUB_OUTPUT}
+
           
       - name: Create simulated physical disk
     
