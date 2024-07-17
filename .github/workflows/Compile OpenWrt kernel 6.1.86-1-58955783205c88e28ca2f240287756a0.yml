@@ -70,14 +70,11 @@ jobs:
         run: |
           touch /builder/config
           
-      - name: Download kmod metadata
+      - name: Extract OpenWrt kmods vermagic
+        id: extract-vermagic
         run: |
-          if [[ -n "${NVM_DIR}" ]]; then
-            sudo sed -i '/NVM_DIR/d;/skel/d' /root/{.bashrc,.profile}
-          fi
-          sudo rm -rf ~/{.cargo,.dotnet,.rustup}
-          sudo timedatectl set-timezone "${TZ}"
-          echo "status=success" >> ${GITHUB_OUTPUT}
+          vermagic=$(grep -oP 'vermagic="\K.*"' openwrt-kmods/*/*.ko | head -n1)
+          echo "::set-output name=vermagic::$vermagic"
 
           
       - name: Create simulated physical disk    
