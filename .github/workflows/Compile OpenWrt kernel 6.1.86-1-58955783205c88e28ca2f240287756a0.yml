@@ -77,7 +77,7 @@ jobs:
           echo "::set-output name=vermagic::$vermagic"
 
           
-      - name: Create simulated physical disk    
+      - name: Create simulated physical disk
         run: |
           mnt_size=$(expr $(df -h /mnt | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 1)
           root_size=$(expr $(df -h / | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 4)
@@ -93,7 +93,6 @@ jobs:
           sudo mkdir -p /builder
           sudo mount /dev/github/runner /builder
           sudo chown -R runner.runner /builder
-          sudo umount /mnt/mnt.img
           df -Th
 
           
