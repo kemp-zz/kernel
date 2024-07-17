@@ -1,3 +1,4 @@
+
 name: Compile OpenWrt kernel 6.1.86-1-58955783205c88e28ca2f240287756a0
 
 on:
@@ -36,46 +37,6 @@ jobs:
           sudo rm -rf ~/{.cargo,.dotnet,.rustup}
           sudo timedatectl set-timezone "${TZ}"
           echo "status=success" >> ${GITHUB_OUTPUT}
-
-          
-      - name: Create simulated physical disk
-         
-        run: |
-          mnt_size=$(expr $(df -h /mnt | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 1)
-          root_size=$(expr $(df -h / | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 4)
-          sudo truncate -s "${mnt_size}"G /mnt/mnt.img
-          sudo truncate -s "${root_size}"G /root.img
-          sudo losetup /dev/loop6 /mnt/mnt.img
-          sudo losetup /dev/loop7 /root.img
-          sudo pvcreate /dev/loop6
-          sudo pvcreate /dev/loop7
-          sudo vgcreate github /dev/loop6 /dev/loop7
-          sudo lvcreate -n runner -l 100%FREE github
-          sudo mkfs.xfs /dev/github/runner
-          sudo mkdir -p /builder
-          sudo mount /dev/github/runner /builder
-          sudo chown -R runner.runner /builder
-          df -Th
-          
-      - name: Create a mapped directory
-       
-        working-directory: /builder
-        run: |
-          df -hT ${PWD}
-          mkdir -p /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel
-          ln -sf /builder/config /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/config
-          echo "status=success" >> ${GITHUB_OUTPUT}
-          
-      - name: Create config file
-        run: |
-          touch /builder/config
-          
-      - name: Extract OpenWrt kmods vermagic
-        id: extract-vermagic
-        run: |
-          vermagic=$(grep -oP 'vermagic="\K.*"' openwrt-kmods/*/*.ko | head -n1)
-          echo "::set-output name=vermagic::$vermagic"
-
           
       - name: Create simulated physical disk
         run: |
@@ -94,10 +55,8 @@ jobs:
           sudo mount /dev/github/runner /builder
           sudo chown -R runner.runner /builder
           df -Th
-
           
       - name: Create a mapped directory
-     
         working-directory: /builder
         run: |
           df -hT ${PWD}
@@ -108,6 +67,7 @@ jobs:
       - name: Create config file
         run: |
           touch /builder/config
+          
       - name: Download kmod metadata
         run: |
           if [[ -n "${{ github.repository }}" ]]; then
@@ -126,6 +86,13 @@ jobs:
           echo "::set-output name=kernel_version::$kernel_version"
           echo "::set-output name=release_version::$release_version"
           echo "::set-output name=md5::$md5"
+          
+      - name: Extract OpenWrt kmods vermagic
+        id: extract-vermagic
+        run: |
+          vermagic=$(grep -oP 'vermagic="\K.*"' openwrt-kmods/*/*.ko | head -n1)
+          echo "::set-output name=vermagic::$vermagic"
+          
       - name: Generate OpenWrt kernel image
         run: |
          make INSTALL_HDR_PATH=output ARCH=arm64 INSTALL_MOD_PATH=output/modules dtbs KCONFIG_CONFIG=kernel-config/release/openwrt INSTALL_DTBS_PATH=output/dtbs INSTALL_VMLINUZ_PATH=output/vmlinuz modules_install install dtbs install vmlinuz_install KVERSION=${{ needs.analyze_metadata.outputs.kernel_version }}
@@ -138,4 +105,3 @@ jobs:
           artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
-
