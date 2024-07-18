@@ -1,55 +1,137 @@
 name: test
 
+Based on your previous requirements, I'll modify the workflow to regenerate a new kernel that corresponds to the kmods (kernel modules) using the three files:
+
+Packages.gz
+Packages.bom.cdx.json
+Packages.manifest
+Here's the modified code:
+
+name: Compile release general kernel
+
 on:
   repository_dispatch:
   workflow_dispatch:
-
-env:
-  TZ: America/New_York
+    inputs:
+      kernel_source:
+        description: "Select the kernel source"
+        required: false
+        default: "unifreq"
+        type: choice
+        options:
+          - unifreq
+          - other
+      kernel_version:
+        description: "Select the kernel version"
+        required: false
+        default: "latest"
+        type: string
+      kernel_auto:
+        description: "Auto-compile kernel"
+        required: false
+        default: true
+        type: boolean
+      kernel_package:
+        description: "Select the kernel package"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - kmods
+      kernel_toolchain:
+        description: "Select the kernel toolchain"
+        required: false
+        default: "gcc"
+        type: choice
+        options:
+          - gcc
+          - clang
+      kernel_sign:
+        description: "Sign the kernel"
+        required: false
+        default: true
+        type: boolean
+      kernel_config:
+        description: "Select the kernel config"
+        required: false
+        default: "default"
+        type: string
+      compress_format:
+        description: "Compress format"
+        required: false
+        default: "gz"
+        type: choice
+        options:
+          - gz
+          - xz
 
 jobs:
-  get-manifest-data:
+  compile-kernel:
     runs-on: ubuntu-latest
-    outputs:
-      kernel_version: ${{ steps.read_manifest.outputs.kernel_version }}
-      md5: ${{ steps.read_manifest.outputs.md5 }}
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Read Packages.manifest
-        id: read_manifest
+      - name: Create simulated physical disk
+        id: disk
         run: |
-          kernel_version=$(jq -r '.kernel_version' Packages.manifest)
-          md5=$(jq -r '.Packages[0].Files[0].MD5Sum' Packages.manifest)
-          echo "::set-output name=kernel_version::$kernel_version"
-          echo "::set-output name=md5::$md5"
+          mnt_size=$(expr $(df -h /mnt | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 1)
+          root_size=$(expr $(df -h / | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 4)
+          sudo truncate -s "${mnt_size}"G /mnt/mnt.img
+          sudo truncate -s "${root_size}"G /root.img
+          sudo losetup /dev/loop6 /mnt/mnt.img
+          sudo losetup /dev/loop7 /root.img
+          sudo pvcreate /dev/loop6
+          sudo pvcreate /dev/loop7
+          sudo vgcreate github /dev/loop6 /dev/loop7
+          sudo lvcreate -n runner -l 100%FREE github
+          sudo mkfs.xfs /dev/github/runner
+          sudo mkdir -p /builder
+          sudo mount /dev/github/runner /builder
+          sudo chown -R runner.runner /builder
+          df -Th
 
-  build-and-release:
-    needs: get-manifest-data
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
+      - name: Create a mapped directory
+        id: mapped
+        working-directory: /builder
+        run: |
+          df -hT ${PWD}
+          mkdir -p /builder/{kernel,output}
+          ln -sf /builder/kernel /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/kernel
+          ln -sf /builder/output /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/output
+          echo "status=success" >> ${GITHUB_OUTPUT}
 
-      - name: Compile the kernel
+      - name: Extract kmods
+        run: |
+          mkdir -p /builder/kmods
+          tar -xvf Packages.gz -C /builder/kmods
+
+      - name: Parse Packages.bom.cdx.json
+        run: |
+          json=$(jq '.[] | {name, version}' Packages.bom.cdx.json)
+          echo "$json" >> kmods_list.txt
+
+      - name: Compile the kernel [ ${{ inputs.kernel_version }} ]
         uses: ophub/amlogic-s9xxx-armbian@main
+        if: ${{ steps.mapped.outputs.status }} == 'success' && !cancelled()
         with:
           build_target: kernel
-          kernel_source: "unifreq"
-          kernel_version: ${{ needs.get-manifest-data.outputs.kernel_version }}
-          kernel_auto: false
-          kernel_package: "all"
-          kernel_toolchain: "gcc"
-          kernel_sign: "-ophub"
-          kernel_config: "kernel-config/release/general"
-          compress_format: "xz"
+          kernel_source: ${{ inputs.kernel_source }}
+          kernel_version: ${{ inputs.kernel_version }}
+          kernel_auto: ${{ inputs.kernel_auto }}
+          kernel_package: ${{ inputs.kernel_package }}
+          kernel_toolchain: ${{ inputs.kernel_toolchain }}
+          kernel_sign: ${{ inputs.kernel_sign }}
+          kernel_config: ${{ inputs.kernel_config }}
+          compress_format: ${{ inputs.compress_format }}
+          kmods_list: file(kmods_list.txt)
 
       - name: Upload Kernel to Release
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@main
+        if: ${{ env.PACKAGED_STATUS }} == 'success' && !cancelled()
         with:
-          tag: ${{ needs.get-manifest-data.outputs.kernel_version }}
-          artifacts: "./output/*"
+          tag: kernel_stable
+          artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
-
