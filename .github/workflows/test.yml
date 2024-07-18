@@ -3,13 +3,6 @@ name: test
 on:
   repository_dispatch:
   workflow_dispatch:
-    inputs:
-      release_version:
-        description: "Select the release version according to Packages.manifest"
-        required: true
-      md5:
-        description: "MD5 checksum for verification"
-        required: true
 
 env:
   TZ: America/New_York
@@ -18,7 +11,8 @@ jobs:
   get-manifest-data:
     runs-on: ubuntu-latest
     outputs:
-      kernel_version: ${{ steps.set-env.outputs.kernel_version }}
+      kernel_version: ${{ steps.read_manifest.outputs.kernel_version }}
+      md5: ${{ steps.read_manifest.outputs.md5 }}
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -26,10 +20,11 @@ jobs:
       - name: Read Packages.manifest
         id: read_manifest
         run: |
-          jq -r '.kernel_version' Packages.manifest
           kernel_version=$(jq -r '.kernel_version' Packages.manifest)
+          md5=$(jq -r '.Packages[0].Files[0].MD5Sum' Packages.manifest)
           echo "::set-output name=kernel_version::$kernel_version"
-          
+          echo "::set-output name=md5::$md5"
+
   build-and-release:
     needs: get-manifest-data
     runs-on: ubuntu-22.04
@@ -53,7 +48,8 @@ jobs:
       - name: Upload Kernel to Release
         uses: ncipollo/release-action@v1
         with:
-          tag: ${{ github.event.inputs.release_version }}
+          tag: ${{ needs.get-manifest-data.outputs.kernel_version }}
           artifacts: "./output/*"
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
+
