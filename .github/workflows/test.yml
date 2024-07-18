@@ -1,66 +1,59 @@
-
-name: test
+name: Compile and Release Kernel
 
 on:
   repository_dispatch:
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Select the release version according to Packages.manifest"
+        required: true
+      md5:
+        description: "MD5 checksum for verification"
+        required: true
 
 env:
   TZ: America/New_York
 
 jobs:
-  build:
-    runs-on: ubuntu-22.04
-
+  get-manifest-data:
+    runs-on: ubuntu-latest
+    outputs:
+      kernel_version: ${{ steps.set-env.outputs.kernel_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
 
-      - name: Initialization environment
-        id: init
-        env:
-          DEBIAN_FRONTEND: noninteractive
+      - name: Read Packages.manifest
+        id: read_manifest
         run: |
-          # Initialize environment (omitted for brevity)
-
-      - name: Create simulated physical disk
-        id: disk
-        run: |
-          # Create simulated physical disk (omitted for brevity)
-
-      - name: Create a mapped directory
-        id: mapped
-        working-directory: /builder
-        run: |
-          # Create a mapped directory (omitted for brevity)
-
-      - name: Download kmod metadata
-        run: |
-          curl -o Packages.manifest https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/kmods/6.1.86-1-58955783205c88e28ca2f240287756a0/Packages.manifest
-
-      - name: Analyze kernel metadata
-        run: |
-          kernel_version=$(grep -oP 'kernel_version="\K[^"]+' Packages.manifest)
-          release_version=$(grep -oP 'release_version="\K[^"]+' Packages.manifest)
-          md5=$(grep -oP 'md5="\K[^"]+' Packages.manifest)
-
+          jq -r '.kernel_version' Packages.manifest
+          kernel_version=$(jq -r '.kernel_version' Packages.manifest)
           echo "::set-output name=kernel_version::$kernel_version"
-          echo "::set-output name=release_version::$release_version"
-          echo "::set-output name=md5::$md5"
+          
+  build-and-release:
+    needs: get-manifest-data
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
 
-      - name: Compile kernel
-        run: |
-          # Compile kernel using the analyzed metadata (omitted for brevity)
-
-      - name: Generate OpenWrt kernel image
-        run: |
-          make INSTALL_HDR_PATH=output ARCH=arm64 INSTALL_MOD_PATH=output/modules dtbs KCONFIG_CONFIG=kernel-config/release/openwrt INSTALL_DTBS_PATH=output/dtbs INSTALL_VMLINUZ_PATH=output/vmlinuz modules_install install dtbs install vmlinuz_install
+      - name: Compile the kernel
+        uses: ophub/amlogic-s9xxx-armbian@main
+        with:
+          build_target: kernel
+          kernel_source: "unifreq"
+          kernel_version: ${{ needs.get-manifest-data.outputs.kernel_version }}
+          kernel_auto: false
+          kernel_package: "all"
+          kernel_toolchain: "gcc"
+          kernel_sign: "-ophub"
+          kernel_config: "kernel-config/release/general"
+          compress_format: "xz"
 
       - name: Upload Kernel to Release
-        uses: ncipollo/release-action@main
-        if: ${{ env.PACKAGED_STATUS }} == 'success' && !cancelled()
+        uses: ncipollo/release-action@v1
         with:
-          tag: kernel_stable
-          artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
+          tag: ${{ github.event.inputs.release_version }}
+          artifacts: "./output/*"
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
