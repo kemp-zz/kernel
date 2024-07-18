@@ -57,11 +57,13 @@ jobs:
           df -Th
           
       - name: Create a mapped directory
+        id: mapped
         working-directory: /builder
         run: |
           df -hT ${PWD}
-          mkdir -p /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel
-          ln -sf /builder/config /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/config
+          mkdir -p /builder/{kernel,output}
+          ln -sf /builder/kernel /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/kernel
+          ln -sf /builder/output /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output
           echo "status=success" >> ${GITHUB_OUTPUT}
           
       - name: Create config file
