@@ -1,4 +1,4 @@
-name: Compile and Release Kernel
+name: test
 
 on:
   repository_dispatch:
