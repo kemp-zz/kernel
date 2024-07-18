@@ -1,13 +1,6 @@
 name: test
 
-Based on your previous requirements, I'll modify the workflow to regenerate a new kernel that corresponds to the kmods (kernel modules) using the three files:
 
-Packages.gz
-Packages.bom.cdx.json
-Packages.manifest
-Here's the modified code:
-
-name: Compile release general kernel
 
 on:
   repository_dispatch:
