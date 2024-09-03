@@ -144,10 +144,15 @@ jobs:
         id: mapped
         working-directory: /builder
         run: |
+          echo "Current working directory: ${PWD}"
+          echo "GitHub workspace: ${{ github.workspace }}"
           df -hT ${PWD}
           mkdir -p /builder/{kernel,output}
+          mkdir -p ${{ github.workspace }}/compile-kernel
           ln -sf /builder/kernel ${{ github.workspace }}/compile-kernel/kernel
           ln -sf /builder/output ${{ github.workspace }}/compile-kernel/output
+          ls -la ${{ github.workspace }}
+          ls -la ${{ github.workspace }}/compile-kernel
           echo "status=success" >> ${GITHUB_OUTPUT}
 
       - name: Compile the kernel [ ${{ inputs.kernel_version }} ]
@@ -163,7 +168,6 @@ jobs:
           kernel_sign: ${{ inputs.kernel_sign }}
           kernel_config: ${{ inputs.kernel_config }}
           compress_format: ${{ inputs.compress_format }}
-
       - name: Upload Kernel to Release
         uses: ncipollo/release-action@main
         if: env.PACKAGED_STATUS == 'success' && !cancelled()
