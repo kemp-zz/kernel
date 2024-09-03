@@ -1,9 +1,3 @@
-#==========================================================================
-# Description: Compile release general kernel
-# Copyright (C) 2021 https://github.com/unifreq/openwrt_packit
-# Copyright (C) 2021 https://github.com/ophub/kernel
-#==========================================================================
-
 name: Compile release general kernel
 
 on:
@@ -100,7 +94,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    if: ${{ github.event.repository.owner.id }} == ${{ github.event.sender.id }}
+    if: github.event.repository.owner.id == github.event.sender.id
 
     steps:
       - name: Checkout
@@ -120,7 +114,6 @@ jobs:
           sudo -E apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
           sudo -E apt-get -y install $(curl -fsSL https://is.gd/depend_ubuntu2204_armbian)
           sudo -E systemctl daemon-reload
-          #sudo -E apt-get -y full-upgrade
           sudo -E apt-get -y autoremove --purge
           sudo -E apt-get clean
           sudo sed -i '/NVM_DIR/d;/skel/d' /root/{.bashrc,.profile}
@@ -153,13 +146,13 @@ jobs:
         run: |
           df -hT ${PWD}
           mkdir -p /builder/{kernel,output}
-          ln -sf /builder/kernel /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/kernel
-          ln -sf /builder/output /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output
+          ln -sf /builder/kernel ${{ github.workspace }}/compile-kernel/kernel
+          ln -sf /builder/output ${{ github.workspace }}/compile-kernel/output
           echo "status=success" >> ${GITHUB_OUTPUT}
 
       - name: Compile the kernel [ ${{ inputs.kernel_version }} ]
-        uses: ophub/amlogic-s9xxx-armbian@main
-        if: ${{ steps.mapped.outputs.status }} == 'success' && !cancelled()
+        uses: kemp-zz/amlogic-s9xxx-armbian@main
+        if: steps.mapped.outputs.status == 'success' && !cancelled()
         with:
           build_target: kernel
           kernel_source: ${{ inputs.kernel_source }}
@@ -173,7 +166,7 @@ jobs:
 
       - name: Upload Kernel to Release
         uses: ncipollo/release-action@main
-        if: ${{ env.PACKAGED_STATUS }} == 'success' && !cancelled()
+        if: env.PACKAGED_STATUS == 'success' && !cancelled()
         with:
           tag: kernel_stable
           artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
