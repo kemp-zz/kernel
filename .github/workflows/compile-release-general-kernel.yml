@@ -168,6 +168,36 @@ jobs:
           kernel_sign: ${{ inputs.kernel_sign }}
           kernel_config: ${{ inputs.kernel_config }}
           compress_format: ${{ inputs.compress_format }}
+
+      - name: Process firmware files
+        if: env.PACKAGED_STATUS == 'success' && !cancelled()
+        run: |
+          echo "Processing firmware files..."
+    
+          # 解压内核包
+          mkdir -p /tmp/kernel_package
+          tar -xzf ${{ env.PACKAGED_OUTPUTPATH }}/*.tar.gz -C /tmp/kernel_package
+    
+          # 复制所有固件文件
+          sudo mkdir -p /tmp/kernel_package/usr/lib
+          sudo cp -rf /usr/lib/firmware /tmp/kernel_package/usr/lib/
+    
+          # 显示固件目录内容
+          echo "Firmware directory contents:"
+          ls -R /tmp/kernel_package/usr/lib/firmware
+    
+          # 重新创建 initrd
+          cd /tmp/kernel_package
+          find . | cpio -H newc -o | gzip -9 > boot/initrd.img-${{ inputs.kernel_version }}
+    
+          # 重新打包内核
+          tar -czf ${{ env.PACKAGED_OUTPUTPATH }}/${{ inputs.kernel_version }}.tar.gz *
+    
+          echo "Firmware processing completed."
+    
+          # 显示最终包的大小
+          ls -lh ${{ env.PACKAGED_OUTPUTPATH }}/${{ inputs.kernel_version }}.tar.gz
+
       - name: Upload Kernel to Release
         uses: ncipollo/release-action@main
         if: env.PACKAGED_STATUS == 'success' && !cancelled()
