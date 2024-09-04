@@ -1,3 +1,9 @@
+#==========================================================================
+# Description: Compile release general kernel
+# Copyright (C) 2021 https://github.com/unifreq/openwrt_packit
+# Copyright (C) 2021 https://github.com/ophub/kernel
+#==========================================================================
+
 name: Compile release general kernel
 
 on:
@@ -113,6 +119,7 @@ jobs:
           sudo -E apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
           sudo -E apt-get -y install $(curl -fsSL https://is.gd/depend_ubuntu2204_armbian)
           sudo -E systemctl daemon-reload
+          #sudo -E apt-get -y full-upgrade
           sudo -E apt-get -y autoremove --purge
           sudo -E apt-get clean
           sudo sed -i '/NVM_DIR/d;/skel/d' /root/{.bashrc,.profile}
@@ -145,47 +152,13 @@ jobs:
         run: |
           df -hT ${PWD}
           mkdir -p /builder/{kernel,output}
-          ln -sf /builder/kernel /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/kernel          
-          ln -sf /builder/output /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output
+          ln -sf /builder/kernel /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/kernel
+          ln -sf /builder/output /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/output
           echo "status=success" >> ${GITHUB_OUTPUT}
 
-      - name: Preprocess kernel modules and initramfs
-        id: preprocess
-        run: |
-          echo "Preprocessing kernel modules and initramfs..."
-          
-          # 创建必要的目录
-          sudo mkdir -p /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output/modules/lib/modules
-          
-          # 检查 initramfs.conf 文件
-          INITRAMFS_CONF="/etc/initramfs-tools/initramfs.conf"
-          if [ ! -f "$INITRAMFS_CONF" ]; then
-            echo "Creating initramfs.conf file..."
-            sudo mkdir -p /etc/initramfs-tools
-            echo "MODULES=most" | sudo tee "$INITRAMFS_CONF"
-            echo "COMPRESS=${{ inputs.compress_format }}" | sudo tee -a "$INITRAMFS_CONF"
-          fi
-          
-          echo "initramfs.conf contents:"
-          cat "$INITRAMFS_CONF"
-          
-          # 检查 chroot 环境
-          CHROOT_PATH="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/chroot"
-          if [ ! -d "$CHROOT_PATH" ]; then
-            echo "Creating chroot environment..."
-            sudo mkdir -p "$CHROOT_PATH"
-            # 这里可以添加更多的 chroot 环境设置步骤
-          fi
-          
-          echo "Chroot environment contents:"
-          ls -la "$CHROOT_PATH"
-          
-          echo "Preprocessing completed."
-          echo "preprocess_status=success" >> $GITHUB_OUTPUT
-
       - name: Compile the kernel [ ${{ inputs.kernel_version }} ]
-        uses: kemp-zz/amlogic-s9xxx-armbian@main
-        if: steps.preprocess.outputs.preprocess_status == 'success' && !cancelled()
+        uses: ophub/amlogic-s9xxx-armbian@main
+        if: ${{ steps.mapped.outputs.status }} == 'success' && !cancelled()
         with:
           build_target: kernel
           kernel_source: ${{ inputs.kernel_source }}
@@ -197,58 +170,9 @@ jobs:
           kernel_config: ${{ inputs.kernel_config }}
           compress_format: ${{ inputs.compress_format }}
 
-      - name: Prepare chroot environment
-        if: env.PACKAGED_STATUS == 'success' && !cancelled()
-        run: |
-          echo "Preparing chroot environment..."
-          
-          # 确定实际的内核版本
-          COMPILE_PATH="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel"
-          KERNEL_VERSION=$(ls ${COMPILE_PATH}/output/boot/vmlinuz-* | sed 's/.*vmlinuz-//')
-          echo "Actual kernel version: ${KERNEL_VERSION}"
-          
-          # 设置 KERNEL_RELEASE 环境变量
-          echo "KERNEL_RELEASE=${KERNEL_VERSION}" >> $GITHUB_ENV
-          
-          # 创建必要的目录
-          sudo mkdir -p ${COMPILE_PATH}/chroot/lib/modules/${KERNEL_VERSION}
-          
-          # 复制模块
-          if [ -d "${COMPILE_PATH}/output/modules/lib/modules/${KERNEL_VERSION}" ]; then
-            sudo cp -r ${COMPILE_PATH}/output/modules/lib/modules/${KERNEL_VERSION}/* ${COMPILE_PATH}/chroot/lib/modules/${KERNEL_VERSION}/
-          elif [ -d "${COMPILE_PATH}/kernel/lib/modules/${KERNEL_VERSION}" ]; then
-            sudo cp -r ${COMPILE_PATH}/kernel/lib/modules/${KERNEL_VERSION}/* ${COMPILE_PATH}/chroot/lib/modules/${KERNEL_VERSION}/
-          else
-            echo "Error: Could not find kernel modules"
-            ls -R ${COMPILE_PATH}/output/modules/lib/modules
-            ls -R ${COMPILE_PATH}/kernel/lib/modules
-            exit 1
-          fi
-          
-          echo "Chroot environment prepared with kernel modules."
-
-      - name: Verify chroot environment
-        if: env.PACKAGED_STATUS == 'success' && !cancelled()
-        run: |
-          echo "Verifying chroot environment..."
-          CHROOT_PATH="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/chroot"
-          
-          echo "Chroot directory contents:"
-          ls -R ${CHROOT_PATH}
-          
-          echo "Kernel modules in chroot:"
-          ls -R ${CHROOT_PATH}/lib/modules
-          
-          if [ ! -d "${CHROOT_PATH}/lib/modules/${KERNEL_RELEASE}" ]; then
-            echo "Error: Kernel modules not found in chroot environment"
-            exit 1
-          fi
-          
-          echo "Chroot environment verification completed."
-
       - name: Upload Kernel to Release
         uses: ncipollo/release-action@main
-        if: env.PACKAGED_STATUS == 'success' && !cancelled()
+        if: ${{ env.PACKAGED_STATUS }} == 'success' && !cancelled()
         with:
           tag: kernel_stable
           artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
