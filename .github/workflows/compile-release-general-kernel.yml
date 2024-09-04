@@ -169,6 +169,55 @@ jobs:
           kernel_config: ${{ inputs.kernel_config }}
           compress_format: ${{ inputs.compress_format }}
 
+      - name: Verify compilation results
+        if: env.PACKAGED_STATUS == 'success' && !cancelled()
+        run: |
+          echo "Verifying compilation results..."
+          
+          # 检查输出目录是否存在
+          if [ ! -d "${{ env.PACKAGED_OUTPUTPATH }}" ]; then
+            echo "Error: Output directory does not exist"
+            exit 1
+          fi
+          
+          # 检查是否有.tar.gz文件
+          if [ -z "$(ls -A ${{ env.PACKAGED_OUTPUTPATH }}/*.tar.gz 2>/dev/null)" ]; then
+            echo "Error: No .tar.gz files found in output directory"
+            exit 1
+          fi
+          
+          # 显示输出目录内容
+          echo "Output directory contents:"
+          ls -lh ${{ env.PACKAGED_OUTPUTPATH }}
+          
+          # 检查内核版本
+          kernel_file=$(ls ${{ env.PACKAGED_OUTPUTPATH }}/*.tar.gz | head -n 1)
+          echo "Kernel file: $kernel_file"
+          
+          # 解压内核包到临时目录
+          temp_dir=$(mktemp -d)
+          tar -xzf "$kernel_file" -C "$temp_dir"
+          
+          # 检查boot目录是否存在
+          if [ ! -d "$temp_dir/boot" ]; then
+            echo "Error: boot directory not found in kernel package"
+            exit 1
+          fi
+          
+          # 检查initrd文件是否存在
+          initrd_file=$(ls $temp_dir/boot/initrd.img-* 2>/dev/null | head -n 1)
+          if [ -z "$initrd_file" ]; then
+            echo "Error: initrd file not found in boot directory"
+            exit 1
+          fi
+          
+          echo "Initrd file found: $initrd_file"
+          
+          # 清理临时目录
+          rm -rf "$temp_dir"
+          
+          echo "Verification completed successfully"
+
       - name: Process firmware files
         if: env.PACKAGED_STATUS == 'success' && !cancelled()
         run: |
@@ -206,9 +255,3 @@ jobs:
           artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          body: |
-            - The kernel can be used to compile Armbian and OpenWrt.
-            - The kernel source code comes from: ${{ inputs.kernel_source }}
-            - The kernel compilation toolchain: ${{ inputs.kernel_toolchain }}
-            - This is a `stable` kernel, which can be used in Armbian and OpenWrt.
-            - 这是`稳定版`内核，可以在 Armbian 和 OpenWrt 里使用。
