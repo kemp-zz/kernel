@@ -155,7 +155,7 @@ jobs:
           echo "Preprocessing kernel modules and initramfs..."
           
           # 创建必要的目录
-          sudo mkdir -p /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output/modules/lib/modules
+          sudo mkdir -p /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/output/modules/lib/modules
           
           # 检查 initramfs.conf 文件
           INITRAMFS_CONF="/etc/initramfs-tools/initramfs.conf"
@@ -170,7 +170,7 @@ jobs:
           cat "$INITRAMFS_CONF"
           
           # 检查 chroot 环境
-          CHROOT_PATH="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/chroot"
+          CHROOT_PATH="/home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/chroot"
           if [ ! -d "$CHROOT_PATH" ]; then
             echo "Creating chroot environment..."
             sudo mkdir -p "$CHROOT_PATH"
@@ -197,25 +197,44 @@ jobs:
           kernel_config: ${{ inputs.kernel_config }}
           compress_format: ${{ inputs.compress_format }}
 
+      - name: Post-process kernel modules
+        if: env.PACKAGED_STATUS == 'success' && !cancelled()
+        run: |
+          echo "Post-processing kernel modules..."
+          
+          # 查找实际的内核版本目录
+          MODULE_BASE="/home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/output/modules/lib/modules"
+          ACTUAL_VERSION=$(ls "$MODULE_BASE" | grep "${{ inputs.kernel_version }}" | head -n 1)
+          
+          if [ -z "$ACTUAL_VERSION" ]; then
+            echo "Error: Could not find kernel module directory for version ${{ inputs.kernel_version }}"
+            ls -R "$MODULE_BASE"
+            exit 1
+          fi
+          
+          echo "Found kernel module directory: $ACTUAL_VERSION"
+          
+          # 创建符号链接
+          sudo ln -sf "$MODULE_BASE/$ACTUAL_VERSION" "$MODULE_BASE/${{ inputs.kernel_version }}${{ inputs.kernel_sign }}"
+          
+          echo "Post-processing completed."
+
       - name: Verify kernel compilation results
         if: env.PACKAGED_STATUS == 'success' && !cancelled()
         run: |
           echo "Verifying kernel compilation results..."
           
-          MODULE_PATH="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output/modules/lib/modules"
-          if [ ! -d "$MODULE_PATH" ]; then
-            echo "Error: Kernel modules directory not found"
-            exit 1
-          fi
-          
-          echo "Module directory contents:"
-          ls -R "$MODULE_PATH"
-          
+          MODULE_PATH="/home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/output/modules/lib/modules"
           KERNEL_VERSION="${{ inputs.kernel_version }}${{ inputs.kernel_sign }}"
+          
           if [ ! -d "$MODULE_PATH/$KERNEL_VERSION" ]; then
             echo "Error: Kernel version directory not found"
+            ls -R "$MODULE_PATH"
             exit 1
           fi
+          
+          echo "Module directory contents for $KERNEL_VERSION:"
+          ls -la "$MODULE_PATH/$KERNEL_VERSION"
           
           REQUIRED_FILES="modules.builtin modules.order modules.builtin.modinfo"
           for file in $REQUIRED_FILES; do
