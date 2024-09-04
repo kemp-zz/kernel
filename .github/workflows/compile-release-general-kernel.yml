@@ -145,8 +145,8 @@ jobs:
         run: |
           df -hT ${PWD}
           mkdir -p /builder/{kernel,output}
-          ln -sf /builder/kernel /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/kernel
-          ln -sf /builder/output /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/output
+          ln -sf /builder/kernel /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/kernel          
+          ln -sf /builder/output /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output
           echo "status=success" >> ${GITHUB_OUTPUT}
 
       - name: Preprocess kernel modules and initramfs
@@ -155,7 +155,7 @@ jobs:
           echo "Preprocessing kernel modules and initramfs..."
           
           # 创建必要的目录
-          sudo mkdir -p /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/output/modules/lib/modules
+          sudo mkdir -p /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output/modules/lib/modules
           
           # 检查 initramfs.conf 文件
           INITRAMFS_CONF="/etc/initramfs-tools/initramfs.conf"
@@ -170,7 +170,7 @@ jobs:
           cat "$INITRAMFS_CONF"
           
           # 检查 chroot 环境
-          CHROOT_PATH="/home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/chroot"
+          CHROOT_PATH="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/chroot"
           if [ ! -d "$CHROOT_PATH" ]; then
             echo "Creating chroot environment..."
             sudo mkdir -p "$CHROOT_PATH"
@@ -184,7 +184,7 @@ jobs:
           echo "preprocess_status=success" >> $GITHUB_OUTPUT
 
       - name: Compile the kernel [ ${{ inputs.kernel_version }} ]
-        uses: ophub/amlogic-s9xxx-armbian@main
+        uses: kemp-zz/amlogic-s9xxx-armbian@main
         if: steps.preprocess.outputs.preprocess_status == 'success' && !cancelled()
         with:
           build_target: kernel
@@ -203,7 +203,7 @@ jobs:
           echo "Preparing chroot environment..."
           
           # 确定实际的内核版本
-          COMPILE_PATH="/home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel"
+          COMPILE_PATH="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel"
           KERNEL_VERSION=$(ls ${COMPILE_PATH}/output/boot/vmlinuz-* | sed 's/.*vmlinuz-//')
           echo "Actual kernel version: ${KERNEL_VERSION}"
           
@@ -231,7 +231,7 @@ jobs:
         if: env.PACKAGED_STATUS == 'success' && !cancelled()
         run: |
           echo "Verifying chroot environment..."
-          CHROOT_PATH="/home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/chroot"
+          CHROOT_PATH="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/chroot"
           
           echo "Chroot directory contents:"
           ls -R ${CHROOT_PATH}
