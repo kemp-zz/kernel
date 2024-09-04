@@ -21,6 +21,7 @@ on:
           - 5.4.y
           - 5.10.y
           - 5.15.y
+          - 5.15.162
           - 6.1.y
           - 6.6.y
           - 6.1.y_6.6.y
@@ -77,7 +78,7 @@ on:
           - -summer-growing
           - -autumn-harvesting
           - -winter-storing
-          - -yourname
+          - -1-7d9483ff60109a7caf36266e8917014e
       kernel_config:
         description: "Set the path of kernel .config"
         required: false
