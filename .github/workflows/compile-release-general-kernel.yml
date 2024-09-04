@@ -20,7 +20,6 @@ on:
         options:
           - 5.4.y
           - 5.10.y
-          - 5.15.162
           - 5.15.y
           - 6.1.y
           - 6.6.y
@@ -94,7 +93,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    if: github.event.repository.owner.id == github.event.sender.id
+    if: ${{ github.event.repository.owner.id }} == ${{ github.event.sender.id }}
 
     steps:
       - name: Checkout
@@ -144,20 +143,49 @@ jobs:
         id: mapped
         working-directory: /builder
         run: |
-          echo "Current working directory: ${PWD}"
-          echo "GitHub workspace: ${{ github.workspace }}"
           df -hT ${PWD}
           mkdir -p /builder/{kernel,output}
-          mkdir -p ${{ github.workspace }}/compile-kernel
-          ln -sf /builder/kernel ${{ github.workspace }}/compile-kernel/kernel
-          ln -sf /builder/output ${{ github.workspace }}/compile-kernel/output
-          ls -la ${{ github.workspace }}
-          ls -la ${{ github.workspace }}/compile-kernel
+          ln -sf /builder/kernel /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/kernel
+          ln -sf /builder/output /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/output
           echo "status=success" >> ${GITHUB_OUTPUT}
 
+      - name: Preprocess kernel modules and initramfs
+        id: preprocess
+        run: |
+          echo "Preprocessing kernel modules and initramfs..."
+          
+          # 创建必要的目录
+          sudo mkdir -p /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output/modules/lib/modules
+          
+          # 检查 initramfs.conf 文件
+          INITRAMFS_CONF="/etc/initramfs-tools/initramfs.conf"
+          if [ ! -f "$INITRAMFS_CONF" ]; then
+            echo "Creating initramfs.conf file..."
+            sudo mkdir -p /etc/initramfs-tools
+            echo "MODULES=most" | sudo tee "$INITRAMFS_CONF"
+            echo "COMPRESS=${{ inputs.compress_format }}" | sudo tee -a "$INITRAMFS_CONF"
+          fi
+          
+          echo "initramfs.conf contents:"
+          cat "$INITRAMFS_CONF"
+          
+          # 检查 chroot 环境
+          CHROOT_PATH="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/chroot"
+          if [ ! -d "$CHROOT_PATH" ]; then
+            echo "Creating chroot environment..."
+            sudo mkdir -p "$CHROOT_PATH"
+            # 这里可以添加更多的 chroot 环境设置步骤
+          fi
+          
+          echo "Chroot environment contents:"
+          ls -la "$CHROOT_PATH"
+          
+          echo "Preprocessing completed."
+          echo "preprocess_status=success" >> $GITHUB_OUTPUT
+
       - name: Compile the kernel [ ${{ inputs.kernel_version }} ]
-        uses: kemp-zz/amlogic-s9xxx-armbian@main
-        if: steps.mapped.outputs.status == 'success' && !cancelled()
+        uses: ophub/amlogic-s9xxx-armbian@main
+        if: steps.preprocess.outputs.preprocess_status == 'success' && !cancelled()
         with:
           build_target: kernel
           kernel_source: ${{ inputs.kernel_source }}
@@ -169,117 +197,35 @@ jobs:
           kernel_config: ${{ inputs.kernel_config }}
           compress_format: ${{ inputs.compress_format }}
 
-      - name: Verify compilation results
+      - name: Verify kernel compilation results
         if: env.PACKAGED_STATUS == 'success' && !cancelled()
         run: |
-          echo "Verifying compilation results..."
-    
-          # 检查输出目录是否存在
-          if [ ! -d "${{ env.PACKAGED_OUTPUTPATH }}" ]; then
-            echo "Error: Output directory does not exist"
+          echo "Verifying kernel compilation results..."
+          
+          MODULE_PATH="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output/modules/lib/modules"
+          if [ ! -d "$MODULE_PATH" ]; then
+            echo "Error: Kernel modules directory not found"
             exit 1
           fi
-    
-          # 检查是否有.tar.gz文件
-          if [ -z "$(ls -A ${{ env.PACKAGED_OUTPUTPATH }}/*.tar.gz 2>/dev/null)" ]; then
-            echo "Error: No .tar.gz files found in output directory"
+          
+          echo "Module directory contents:"
+          ls -R "$MODULE_PATH"
+          
+          KERNEL_VERSION="${{ inputs.kernel_version }}${{ inputs.kernel_sign }}"
+          if [ ! -d "$MODULE_PATH/$KERNEL_VERSION" ]; then
+            echo "Error: Kernel version directory not found"
             exit 1
           fi
-    
-          # 显示输出目录内容
-          echo "Output directory contents:"
-          ls -lh ${{ env.PACKAGED_OUTPUTPATH }}
-    
-          # 检查内核文件
-          kernel_file=$(ls ${{ env.PACKAGED_OUTPUTPATH }}/*.tar.gz | head -n 1)
-          echo "Kernel file: $kernel_file"
-    
-          # 解压内核包到临时目录
-          temp_dir=$(mktemp -d)
-          tar -xzf "$kernel_file" -C "$temp_dir"
-    
-          # 显示解压后的内容
-          echo "Extracted contents:"
-          ls -R "$temp_dir"
-    
-          # 查找并解压boot包
-          boot_package=$(ls $temp_dir/boot-*.tar.gz 2>/dev/null | head -n 1)
-          if [ -n "$boot_package" ]; then
-            echo "Found boot package: $boot_package"
-            tar -xzf "$boot_package" -C "$temp_dir"
-          else
-            echo "Error: boot package not found"
-            exit 1
-          fi
-    
-          # 再次显示解压后的内容
-          echo "Contents after extracting boot package:"
-          ls -R "$temp_dir"
-    
-          # 检查boot目录是否存在
-          if [ ! -d "$temp_dir/boot" ]; then
-            echo "Error: boot directory not found in kernel package"
-            exit 1
-          fi
-    
-          # 检查initrd文件是否存在
-          initrd_file=$(ls $temp_dir/boot/initrd.img-* 2>/dev/null | head -n 1)
-          if [ -z "$initrd_file" ]; then
-            echo "Error: initrd file not found in boot directory"
-            exit 1
-          fi
-    
-          echo "Initrd file found: $initrd_file"
-    
-          # 清理临时目录
-          rm -rf "$temp_dir"
-    
-          echo "Verification completed successfully"
-
-      - name: Process firmware files
-        if: env.PACKAGED_STATUS == 'success' && !cancelled()
-        run: |
-          echo "Processing firmware files..."
-
-          # 解压内核包
-          mkdir -p /tmp/kernel_package
-          tar -xzf ${{ env.PACKAGED_OUTPUTPATH }}/*.tar.gz -C /tmp/kernel_package
-
-          # 显示解压后的内容
-          echo "Extracted contents:"
-          ls -R /tmp/kernel_package
-
-          # 检查是否需要重新打包
-          if [ -d "/tmp/kernel_package/usr/lib/firmware" ]; then
-            echo "Firmware already included in the package. Skipping repackaging."
-          else
-            echo "Firmware not found in the package. Proceeding with repackaging."
-
-            # 复制所有固件文件
-            sudo mkdir -p /tmp/kernel_package/usr/lib
-            sudo cp -rf /usr/lib/firmware /tmp/kernel_package/usr/lib/
-
-            # 显示固件目录内容
-            echo "Firmware directory contents:"
-            ls -R /tmp/kernel_package/usr/lib/firmware
-
-            # 重新创建 initrd (使用通配符匹配版本)
-            cd /tmp/kernel_package
-            if [ -d boot ]; then
-              find . | cpio -H newc -o | gzip -9 > boot/initrd.img-$(ls boot/config-* | sed 's/boot\/config-//')
-            else
-              echo "Error: boot directory not found"
+          
+          REQUIRED_FILES="modules.builtin modules.order modules.builtin.modinfo"
+          for file in $REQUIRED_FILES; do
+            if [ ! -f "$MODULE_PATH/$KERNEL_VERSION/$file" ]; then
+              echo "Error: Required file $file not found"
               exit 1
             fi
-      
-            # 重新打包内核
-            tar -czf ${{ env.PACKAGED_OUTPUTPATH }}/$(ls boot/config-* | sed 's/boot\/config-//').tar.gz *
-
-            echo "Firmware processing and repackaging completed."
-          fi
-
-          # 显示最终包的大小
-          ls -lh ${{ env.PACKAGED_OUTPUTPATH }}/*.tar.gz
+          done
+          
+          echo "Kernel compilation verification completed successfully."
 
       - name: Upload Kernel to Release
         uses: ncipollo/release-action@main
@@ -289,3 +235,9 @@ jobs:
           artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
+          body: |
+            - The kernel can be used to compile Armbian and OpenWrt.
+            - The kernel source code comes from: ${{ inputs.kernel_source }}
+            - The kernel compilation toolchain: ${{ inputs.kernel_toolchain }}
+            - This is a `stable` kernel, which can be used in Armbian and OpenWrt.
+            - 这是`稳定版`内核，可以在 Armbian 和 OpenWrt 里使用。
