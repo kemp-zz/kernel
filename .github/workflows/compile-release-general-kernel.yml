@@ -141,54 +141,28 @@ jobs:
           ln -sf /builder/output /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/output
           echo "status=success" >> ${GITHUB_OUTPUT}
 
-      - name: Check for 5.15.162 or closest version
-        id: check_version
-        run: |
-          git clone --depth=1000 https://github.com/unifreq/linux-5.15.y.git /tmp/kernel
-          cd /tmp/kernel
-          if git rev-parse --verify 244dce52c74abd24de772a07f83522493c888412 >/dev/null 2>&1; then
-            echo "version=5.15.162" >> $GITHUB_OUTPUT
-            echo "commit=244dce52c74abd24de772a07f83522493c888412" >> $GITHUB_OUTPUT
-          else
-            latest_tag=$(git describe --tags --abbrev=0 --match "v5.15.*" 2>/dev/null || echo "")
-            if [ -n "$latest_tag" ]; then
-              echo "version=${latest_tag#v}" >> $GITHUB_OUTPUT
-              echo "commit=$(git rev-parse $latest_tag)" >> $GITHUB_OUTPUT
-            else
-              latest_commit=$(git log --grep="Linux 5.15." --format="%H" -n 1)
-              if [ -n "$latest_commit" ]; then
-                version=$(git log -1 --format=%s $latest_commit | grep -oP 'Linux \K[0-9]+\.[0-9]+\.[0-9]+')
-                echo "version=$version" >> $GITHUB_OUTPUT
-                echo "commit=$latest_commit" >> $GITHUB_OUTPUT
-              else
-                echo "No suitable 5.15.x version found."
-                exit 1
-              fi
-            fi
-          fi
+      - name: Checkout specific commit
+        uses: actions/checkout@v4
+        with:
+          repository: unifreq/linux-5.15.y
+          ref: 244dce52c74abd24de772a07f83522493c888412
+          path: kernel-source
 
-      - name: Modify compile kernel script
-        if: steps.check_version.outputs.version != ''
+      - name: Update Makefile version
+        working-directory: kernel-source
         run: |
-          script_path="/home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/tools/script/armbian_compile_kernel_script.sh"
-          sudo sed -i 's/git clone -q --single-branch --depth=1/git clone -q --single-branch --depth=1000/' "$script_path"
-          sudo sed -i '/get_kernel_source()/a\
-            cd ${kernel_path}/${local_kernel_path}\
-            git checkout ${{ steps.check_version.outputs.commit }}\
-            kernel_version="${{ steps.check_version.outputs.version }}"\
-            build_kernel=("${kernel_version}")' "$script_path"
-          sudo sed -i '/query_version()/,/}/c\
-          query_version() {\
-            echo "Using kernel version: ${kernel_version}"\
-          }' "$script_path"
+          sed -i 's/^SUBLEVEL = .*/SUBLEVEL = 162/' Makefile
+          grep '^VERSION = ' Makefile
+          grep '^PATCHLEVEL = ' Makefile
+          grep '^SUBLEVEL = ' Makefile
+          grep '^EXTRAVERSION = ' Makefile
 
       - name: Compile the kernel
-        if: steps.check_version.outputs.version != ''
         uses: ophub/amlogic-s9xxx-armbian@main
         with:
           build_target: kernel
-          kernel_source: ${{ inputs.kernel_source }}
-          kernel_version: ${{ steps.check_version.outputs.version }}
+          kernel_source: kernel-source
+          kernel_version: 5.15.162
           kernel_auto: false
           kernel_package: ${{ inputs.kernel_package }}
           kernel_toolchain: ${{ inputs.kernel_toolchain }}
@@ -197,16 +171,16 @@ jobs:
           compress_format: ${{ inputs.compress_format }}
 
       - name: Upload Kernel to Release
-        if: steps.check_version.outputs.version != '' && env.PACKAGED_STATUS == 'success' && !cancelled()
+        if: env.PACKAGED_STATUS == 'success' && !cancelled()
         uses: ncipollo/release-action@main
         with:
-          tag: kernel_${{ steps.check_version.outputs.version }}
+          tag: kernel_5.15.162
           artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Notification of build failure
-        if: steps.check_version.outputs.version == ''
+        if: failure()
         run: |
-          echo "No suitable 5.15.x kernel version was found in the repository. The kernel compilation process has been skipped."
+          echo "The kernel compilation process has failed."
           exit 1
