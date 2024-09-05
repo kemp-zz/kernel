@@ -144,7 +144,7 @@ jobs:
       - name: Check for 5.15.162 commit
         id: check_commit
         run: |
-          git clone --depth=1 --branch linux-5.15.y https://github.com/unifreq/linux-5.15.y.git /tmp/kernel
+          git clone --depth=1 https://github.com/unifreq/linux-5.15.y.git /tmp/kernel
           cd /tmp/kernel
           if git cat-file -e 244dce52c74abd24de772a07f83522493c888412; then
             echo "commit_exists=true" >> $GITHUB_OUTPUT
@@ -153,12 +153,12 @@ jobs:
             echo "commit_exists=false" >> $GITHUB_OUTPUT
             echo "5.15.162 commit not found."
           fi
-
+          
       - name: Modify compile kernel script
         if: steps.check_commit.outputs.commit_exists == 'true'
         run: |
           script_path="/home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/tools/script/armbian_compile_kernel_script.sh"
-          sudo sed -i 's/git clone -q --single-branch --depth=1/git clone -q --single-branch --depth=1 --branch linux-5.15.y/' "$script_path"
+          sudo sed -i 's/git clone -q --single-branch --depth=1/git clone -q --single-branch --depth=1 /' "$script_path"
           sudo sed -i '/get_kernel_source()/a\
             cd ${kernel_path}/${local_kernel_path}\
             git checkout 244dce52c74abd24de772a07f83522493c888412\
