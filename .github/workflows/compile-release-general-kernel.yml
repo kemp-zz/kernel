@@ -92,70 +92,30 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Initialization environment
-        id: init
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
           sudo apt-get -y install $(curl -fsSL https://is.gd/depend_ubuntu2204_armbian)
           sudo timedatectl set-timezone "${TZ}"
-          echo "status=success" >> ${GITHUB_OUTPUT}
-
-      - name: Checkout kernel source
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.event.inputs.kernel_source || 'unifreq' }}/linux-5.15.y
-          ref: ${{ github.event.inputs.kernel_version == '5.15.162' && '244dce52c74abd24de772a07f83522493c888412' || '' }}
-          path: kernel-source
-
-      - name: Update Makefile version
-        working-directory: kernel-source
-        run: |
-          echo "Current directory: $(pwd)"
-          echo "Makefile content before modification:"
-          cat Makefile | grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) ='
-          
-          sed -i 's/^SUBLEVEL = .*/SUBLEVEL = 162/' Makefile
-          
-          echo "Makefile content after modification:"
-          cat Makefile | grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) ='
-          
-          if ! grep -q '^SUBLEVEL = 162' Makefile; then
-            echo "Failed to update SUBLEVEL in Makefile"
-            exit 1
-          fi
-          
-          if ! grep -q '^EXTRAVERSION =' Makefile; then
-            echo "EXTRAVERSION not found, adding it..."
-            echo "EXTRAVERSION =" >> Makefile
-          fi
-          
-          echo "Final Makefile content:"
-          cat Makefile | grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) ='
-
-      - name: Prepare kernel source for compilation
-        run: |
-          mkdir -p /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/kernel
-          cp -r kernel-source/* /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/kernel/
 
       - name: Compile the kernel
         uses: kemp-zz/amlogic-s9xxx-armbian@main
         with:
           build_target: kernel
-          kernel_source: local
-          kernel_version: ${{ github.event.inputs.kernel_version || '5.15.162' }}
+          kernel_version: 5.15.162
           kernel_auto: false
           kernel_package: ${{ github.event.inputs.kernel_package || 'all' }}
           kernel_toolchain: ${{ github.event.inputs.kernel_toolchain || 'gcc' }}
-          kernel_sign: ${{ github.event.inputs.kernel_sign || '-ophub' }}
+          kernel_sign: ${{ github.event.inputs.kernel_sign || '-1-7d9483ff60109a7caf36266e8917014e' }}
           kernel_config: ${{ github.event.inputs.kernel_config || 'kernel-config/release/general' }}
           compress_format: ${{ github.event.inputs.compress_format || 'xz' }}
 
       - name: Upload Kernel to Release
-        if: env.PACKAGED_STATUS == 'success' && !cancelled()
         uses: ncipollo/release-action@main
+        if: env.PACKAGED_STATUS == 'success' && !cancelled()
         with:
-          tag: kernel_${{ github.event.inputs.kernel_version || '5.15.162' }}
+          tag: kernel_5.15.162
           artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -163,5 +123,7 @@ jobs:
       - name: Notification of build failure
         if: failure()
         run: |
+          echo "The kernel compilation process has failed."
+          exit 1
           echo "The kernel compilation process has failed."
           exit 1
