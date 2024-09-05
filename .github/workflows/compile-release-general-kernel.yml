@@ -16,9 +16,7 @@ on:
         description: "Select kernel version"
         required: false
         default: "5.15.162"
-        type: choice
-        options:
-          - 5.15.162
+        type: string
       kernel_auto:
         description: "Auto use the latest kernel"
         required: false
@@ -71,7 +69,7 @@ on:
           - -summer-growing
           - -autumn-harvesting
           - -winter-storing
-          - -yourname
+          - -1-7d9483ff60109a7caf36266e8917014e
       kernel_config:
         description: "Set the path of kernel .config"
         required: false
@@ -139,18 +137,41 @@ jobs:
         run: |
           df -hT ${PWD}
           mkdir -p /builder/{kernel,output}
-          ln -sf /builder/kernel /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/kernel
-          ln -sf /builder/output /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output
+          ln -sf /builder/kernel /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/kernel
+          ln -sf /builder/output /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/output
           echo "status=success" >> ${GITHUB_OUTPUT}
 
-      - name: Modify build_kernel and query_version
+      - name: Check for 5.15.162 commit
+        id: check_commit
         run: |
-          sed -i 's/build_kernel=.*/build_kernel=("5.15.162")/' /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/tools/script/armbian_compile_kernel_script.sh
-          sed -i 's/query_version() {/query_version() {\n  kernel_version="5.15.162"/' /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/tools/script/armbian_compile_kernel_script.sh
+          git clone --depth=1 --branch linux-5.15.y https://github.com/unifreq/linux-5.15.y.git /tmp/kernel
+          cd /tmp/kernel
+          if git cat-file -e 244dce52c74abd24de772a07f83522493c888412; then
+            echo "commit_exists=true" >> $GITHUB_OUTPUT
+            echo "5.15.162 commit (244dce52c74abd24de772a07f83522493c888412) found."
+          else
+            echo "commit_exists=false" >> $GITHUB_OUTPUT
+            echo "5.15.162 commit not found."
+          fi
 
-      - name: Compile the kernel [ ${{ inputs.kernel_version }} ]
-        uses: kemp-zz/amlogic-s9xxx-armbian@main
-        if: ${{ steps.mapped.outputs.status }} == 'success' && !cancelled()
+      - name: Modify compile kernel script
+        if: steps.check_commit.outputs.commit_exists == 'true'
+        run: |
+          script_path="/home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/tools/script/armbian_compile_kernel_script.sh"
+          sudo sed -i 's/git clone -q --single-branch --depth=1/git clone -q --single-branch --depth=1 --branch linux-5.15.y/' "$script_path"
+          sudo sed -i '/get_kernel_source()/a\
+            cd ${kernel_path}/${local_kernel_path}\
+            git checkout 244dce52c74abd24de772a07f83522493c888412\
+            kernel_version="5.15.162"\
+            build_kernel=("${kernel_version}")' "$script_path"
+          sudo sed -i '/query_version()/,/}/c\
+          query_version() {\
+            echo "Using kernel version: ${kernel_version}"\
+          }' "$script_path"
+
+      - name: Compile the kernel
+        if: steps.check_commit.outputs.commit_exists == 'true'
+        uses: ophub/amlogic-s9xxx-armbian@main
         with:
           build_target: kernel
           kernel_source: ${{ inputs.kernel_source }}
@@ -163,10 +184,16 @@ jobs:
           compress_format: ${{ inputs.compress_format }}
 
       - name: Upload Kernel to Release
+        if: steps.check_commit.outputs.commit_exists == 'true' && env.PACKAGED_STATUS == 'success' && !cancelled()
         uses: ncipollo/release-action@main
-        if: ${{ env.PACKAGED_STATUS }} == 'success' && !cancelled()
         with:
           tag: kernel_stable
           artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notification of build failure
+        if: steps.check_commit.outputs.commit_exists == 'false'
+        run: |
+          echo "The 5.15.162 commit was not found in the repository. The kernel compilation process has been skipped."
+          exit 1
