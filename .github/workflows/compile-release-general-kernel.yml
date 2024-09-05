@@ -167,24 +167,24 @@ jobs:
           repo_owner="${{ inputs.kernel_source }}"
           toolchain_name="${{ inputs.kernel_toolchain }}"
           compress_format="${{ inputs.compress_format }}"
-      }
-      EOF
+           }
+            EOF
           sed -i '/^init_var(/,/^}/d' $temp_script
           cat /tmp/init_var_func >> $temp_script
     
           # 修改 query_version 函数
           cat << 'EOF' > /tmp/query_version_func
-      query_version() {
+            query_version() {
           echo "Using specified kernel version: ${{ inputs.kernel_version }}"
           build_kernel=("${{ inputs.kernel_version }}")
-      }
-      EOF
+            }
+            EOF
           sed -i '/^query_version(/,/^}/d' $temp_script
           cat /tmp/query_version_func >> $temp_script
     
           # 修改 get_kernel_source 函数
           cat << 'EOF' > /tmp/get_kernel_source_func
-      get_kernel_source() {
+            get_kernel_source() {
           cd ${current_path}
           echo -e "${STEPS} Start downloading the kernel source code..."
           [[ -d "${kernel_path}" ]] || mkdir -p ${kernel_path}
@@ -203,8 +203,8 @@ jobs:
           fi
           rm -f ${kernel_path}/${local_kernel_path}/localversion
           [[ "${auto_patch}" == "true" || "${auto_patch}" == "yes" ]] && apply_patch
-      }
-      EOF
+            }
+            EOF
           sed -i '/^get_kernel_source(/,/^}/d' $temp_script
           cat /tmp/get_kernel_source_func >> $temp_script
           
