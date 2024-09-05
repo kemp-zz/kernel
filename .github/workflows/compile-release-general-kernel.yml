@@ -153,14 +153,40 @@ jobs:
       - name: Modify armbian_compile_kernel_script.sh
         run: |
           script_path="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/tools/script/armbian_compile_kernel_script.sh"
+    
+          # 修改内核源
           sed -i 's/^repo_owner="unifreq"/repo_owner="${{ inputs.kernel_source }}"/' $script_path
-          sed -i 's/^build_kernel=(.*)/build_kernel=("${{ inputs.kernel_version }}")/' $script_path
-          sed -i 's/^auto_kernel="true"/auto_kernel="${{ inputs.kernel_auto }}"/' $script_path
+          
+          # 修改内核版本
+          if [[ "${{ inputs.kernel_version }}" == *"y" ]]; then
+            # 如果选择的是 y 结尾的版本（如 5.15.y），保持原有的查询逻辑
+            sed -i 's/^build_kernel=(.*)/build_kernel=("${{ inputs.kernel_version }}")/' $script_path
+          else
+            # 如果选择的是具体版本（如 5.15.162），直接设置该版本
+            sed -i 's/^build_kernel=(.*)/build_kernel=("${{ inputs.kernel_version }}")/' $script_path
+            # 禁用版本查询逻辑
+            sed -i 's/^auto_kernel=".*"/auto_kernel="false"/' $script_path
+            # 修改查询函数，使其直接返回指定的版本
+            sed -i '/^query_version()/,/^}/c\
+            query_version() {\
+              echo "Using specified kernel version: ${{ inputs.kernel_version }}"\
+              build_kernel=("${{ inputs.kernel_version }}")\
+            }' $script_path
+                fi
+    
+          # 其他设置保持不变
+          sed -i 's/^auto_kernel=".*"/auto_kernel="${{ inputs.kernel_auto }}"/' $script_path
           sed -i 's/^package_list="all"/package_list="${{ inputs.kernel_package }}"/' $script_path
           sed -i 's/^toolchain_name="gcc"/toolchain_name="${{ inputs.kernel_toolchain }}"/' $script_path
           sed -i 's/^compress_format="xz"/compress_format="${{ inputs.compress_format }}"/' $script_path
           sed -i 's/^custom_name="-ophub"/custom_name="${{ inputs.kernel_sign }}"/' $script_path
 
+          # 打印修改后的关键部分，用于调试
+          echo "Modified script contents:"
+          grep -n "^repo_owner=" $script_path
+          grep -n "^build_kernel=" $script_path
+          grep -n "^auto_kernel=" $script_path
+          grep -n "query_version()" $script_path -A 5
       - name: Compile the kernel
         uses: kemp-zz/amlogic-s9xxx-armbian@main
         if: ${{ steps.mapped.outputs.status }} == 'success' && !cancelled()
