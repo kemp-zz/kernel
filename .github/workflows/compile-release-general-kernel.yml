@@ -174,18 +174,19 @@ jobs:
           echo "Final Makefile content:"
           cat Makefile | grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) ='
           
-      - name: Check kernel source
+      - name: Debug - Check kernel source
         run: |
+          echo "Current directory: $(pwd)"
           echo "Kernel source directory contents:"
-          ls -la ${{ github.workspace }}/kernel-source
-          echo "Kernel config directory contents:"
-          ls -la ${{ github.workspace }}/kernel-config/release/general     
+          ls -la /home/runner/work/kernel/kernel/kernel-source
+          echo "Action directory contents:"
+          ls -la /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main     
 
       - name: Compile the kernel
         uses: kemp-zz/amlogic-s9xxx-armbian@main
         with:
           build_target: kernel
-          kernel_source: ${{ github.workspace }}/kernel-source
+          kernel_source: /home/runner/work/kernel/kernel/kernel-source
           kernel_version: 5.15.162
           kernel_auto: false
           kernel_package: all
