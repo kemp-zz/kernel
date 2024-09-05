@@ -148,50 +148,57 @@ jobs:
       - name: Modify armbian_compile_kernel_script.sh
         run: |
           script_path="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/tools/script/armbian_compile_kernel_script.sh"
+          temp_script="/tmp/temp_armbian_compile_kernel_script.sh"
+        
+          # 创建临时脚本文件
+          cp $script_path $temp_script
         
           # 直接修改关键变量
-          sed -i 's/^build_kernel=(.*)/build_kernel=("${{ inputs.kernel_version }}")/' $script_path
-          sed -i 's/^auto_kernel="true"/auto_kernel="false"/' $script_path
-          sed -i 's/^kernel_version=.*/kernel_version="${{ inputs.kernel_version }}"/' $script_path
+          sed -i 's/^build_kernel=(.*)/build_kernel=("${{ inputs.kernel_version }}")/' $temp_script
+          sed -i 's/^auto_kernel="true"/auto_kernel="false"/' $temp_script
+          sed -i 's/^kernel_version=.*/kernel_version="${{ inputs.kernel_version }}"/' $temp_script
         
-          # 添加版本检查和日志
-          sed -i '/^get_kernel_source(/i\
-          check_kernel_version() {\
-            if [[ "${kernel_version}" != "${{ inputs.kernel_version }}" ]]; then\
-            echo "ERROR: Kernel version mismatch. Expected ${{ inputs.kernel_version }}, got ${kernel_version}"\
-            exit 1\
-          fi\
-          echo "INFO: Using kernel version ${kernel_version}"\
-          }\
-          ' $script_path
-        
-          # 在关键函数开始时添加版本检查
-          sed -i '/^get_kernel_source(/a\    check_kernel_version' $script_path
-          sed -i '/^compile_kernel(/a\    check_kernel_version' $script_path
+          # 添加版本检查函数
+          cat << 'EOF' >> $temp_script
+  
+          check_kernel_version() {
+            if [[ "${kernel_version}" != "${{ inputs.kernel_version }}" ]]; then
+              echo "ERROR: Kernel version mismatch. Expected ${{ inputs.kernel_version }}, got ${kernel_version}"
+              exit 1
+            fi
+            echo "INFO: Using kernel version ${kernel_version}"
+          }
+          EOF
         
           # 修改 get_kernel_source 函数
           sed -i '/^get_kernel_source(/,/^}/c\
           get_kernel_source() {\
-          check_kernel_version\
-          cd ${current_path}\
-          echo -e "${STEPS} Start downloading the kernel source code..."\
-          [[ -d "${kernel_path}" ]] || mkdir -p ${kernel_path}\
-          kernel_version="${{ inputs.kernel_version }}"\
-          build_kernel=("${kernel_version}")\
-          kernel_verpatch="$(echo ${kernel_version} | awk -F '"'"'."'"'" '"'"'{print $1"."$2}'"'"')"\
-          server_kernel_repo="${code_owner}/linux-${kernel_verpatch}.y"\
-          local_kernel_path="linux-${kernel_verpatch}.y"\
-          if [[ ! -d "${kernel_path}/${local_kernel_path}" ]]; then\
-            echo -e "${INFO} Start cloning from [ https://github.com/${server_kernel_repo} -b v${kernel_version} ]"\
-            git clone --depth=1 --single-branch --branch=v${kernel_version} https://github.com/${server_kernel_repo} ${kernel_path}/${local_kernel_path}\
-            if [ $? -ne 0 ]; then\
-              echo "Failed to clone kernel source"\
+            check_kernel_version\
+            cd ${current_path}\
+            echo -e "${STEPS} Start downloading the kernel source code..."\
+            [[ -d "${kernel_path}" ]] || mkdir -p ${kernel_path}\
+            kernel_version="${{ inputs.kernel_version }}"\
+            build_kernel=("${kernel_version}")\
+            kernel_verpatch="$(echo ${kernel_version} | awk -F '"'"'."'"'" '"'"'{print $1"."$2}'"'"')"\
+           server_kernel_repo="${code_owner}/linux-${kernel_verpatch}.y"\
+            local_kernel_path="linux-${kernel_verpatch}.y"\
+            if [[ ! -d "${kernel_path}/${local_kernel_path}" ]]; then\
+              echo -e "${INFO} Start cloning from [ https://github.com/${server_kernel_repo} -b v${kernel_version} ]"\
+              git clone --depth=1 --single-branch --branch=v${kernel_version} https://github.com/${server_kernel_repo} ${kernel_path}/${local_kernel_path}\
+              if [ $? -ne 0 ]; then\
+                echo "Failed to clone kernel source"\
               exit 1\
+              fi\
             fi\
-          fi\
-          rm -f ${kernel_path}/${local_kernel_path}/localversion\
-          [[ "${auto_patch}" == "true" || "${auto_patch}" == "yes" ]] && apply_patch\
-          }' $script_path
+            rm -f ${kernel_path}/${local_kernel_path}/localversion\
+            [[ "${auto_patch}" == "true" || "${auto_patch}" == "yes" ]] && apply_patch\
+          }' $temp_script
+        
+          # 在 compile_kernel 函数开始时添加版本检查
+          sed -i '/^compile_kernel(/a\    check_kernel_version' $temp_script
+        
+          # 替换原始脚本
+          mv $temp_script $script_path
         
           # 打印修改后的关键部分
           echo "Modified script contents:"
@@ -207,26 +214,25 @@ jobs:
         if: ${{ steps.mapped.outputs.status }} == 'success' && !cancelled()
         env:
           KERNEL_VERSION: ${{ env.KERNEL_VERSION }}
-          AUTO_KERNEL: ${{ env.AUTO_KERNEL }}
+          AUTO_KERNEL: false
         with:
-         build_target: kernel
-         kernel_version: ${{ env.KERNEL_VERSION }}
-         kernel_auto: ${{ env.AUTO_KERNEL }}
-         kernel_source: ${{ inputs.kernel_source }}
-         kernel_sign: ${{ inputs.kernel_sign }}
-         kernel_config: ${{ inputs.kernel_config }}
-         kernel_package: ${{ inputs.kernel_package }}
-         kernel_toolchain: ${{ inputs.kernel_toolchain }}
-         compress_format: ${{ inputs.compress_format }}
+          build_target: kernel
+          kernel_version: ${{ env.KERNEL_VERSION }}
+          kernel_auto: false
+          kernel_source: ${{ inputs.kernel_source }}
+          kernel_sign: ${{ inputs.kernel_sign }}
+          kernel_config: ${{ inputs.kernel_config }}
+          kernel_package: ${{ inputs.kernel_package }}
+          kernel_toolchain: ${{ inputs.kernel_toolchain }}
+          compress_format: ${{ inputs.compress_format }}
+
       - name: Debug information
         if: always()
         run: |
           echo "Kernel version: ${{ env.KERNEL_VERSION }}"
-          echo "Auto kernel: ${{ env.AUTO_KERNEL }}"
-          echo "Contents of current directory:"
-          ls -R
-          echo "Contents of /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel:"
-          ls -R /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel || true
+          echo "Auto kernel: false"
+          echo "Contents of script file:"
+          cat /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/tools/script/armbian_compile_kernel_script.sh
 
       - name: Upload Kernel to Release
         uses: ncipollo/release-action@main
