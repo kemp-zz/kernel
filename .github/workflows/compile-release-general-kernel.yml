@@ -4,64 +4,6 @@ on:
   repository_dispatch:
   workflow_dispatch:
     inputs:
-      kernel_source:
-        description: "Select the kernel source"
-        required: false
-        default: "unifreq"
-        type: choice
-        options:
-          - unifreq
-          - codesnas
-      kernel_version:
-        description: "Select kernel version"
-        required: false
-        default: "5.15.162"
-        type: choice
-        options:
-          - 5.4.y
-          - 5.10.y
-          - 5.15.y
-          - 5.15.162
-          - 6.1.y
-          - 6.6.y
-          - 6.1.y_6.6.y
-          - 5.15.y_5.10.y
-      kernel_auto:
-        description: "Auto use the latest kernel"
-        required: false
-        default: false
-        type: boolean
-      kernel_package:
-        description: "Select compile package list"
-        required: false
-        default: "all"
-        type: choice
-        options:
-          - all
-          - dtbs
-      kernel_toolchain:
-        description: "Select the compilation toolchain"
-        required: false
-        default: "gcc"
-        type: choice
-        options:
-          - clang
-          - gcc
-          - gcc-11.3
-          - gcc-12.2
-          - gcc-12.3
-          - gcc-13.2
-          - gcc-13.3
-      compress_format:
-        description: "Set the initrd compression format"
-        required: false
-        default: "xz"
-        type: choice
-        options:
-          - xz
-          - gzip
-          - zstd
-          - lzma
       kernel_sign:
         description: "Set the kernel custom signature"
         required: false
@@ -90,6 +32,7 @@ on:
 
 env:
   TZ: America/New_York
+  KERNEL_VERSION: "5.15.162"
 
 jobs:
   build:
@@ -140,98 +83,65 @@ jobs:
           sudo chown -R runner.runner /builder
           df -Th
 
-      - name: Set kernel version
-        run: |
-          echo "KERNEL_VERSION=${{ inputs.kernel_version }}" >> $GITHUB_ENV
-          echo "AUTO_KERNEL=false" >> $GITHUB_ENV
-  
       - name: Modify armbian_compile_kernel_script.sh
         run: |
           script_path="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/tools/script/armbian_compile_kernel_script.sh"
-          temp_script="/tmp/temp_armbian_compile_kernel_script.sh"
-        
-          # 创建临时脚本文件
-          cp $script_path $temp_script
           
           # 修改关键变量
-          sed -i 's/^build_kernel=(.*)/build_kernel=("${{ inputs.kernel_version }}")/' $temp_script
-          sed -i 's/^auto_kernel="true"/auto_kernel="false"/' $temp_script
-          sed -i 's/^kernel_version=.*/kernel_version="${{ inputs.kernel_version }}"/' $temp_script
-        
-          # 添加版本检查函数
-          cat << 'EOF' >> $temp_script
-
-          check_kernel_version() {
-            if [[ "${kernel_version}" != "${{ inputs.kernel_version }}" ]]; then
-              echo "ERROR: Kernel version mismatch. Expected ${{ inputs.kernel_version }}, got ${kernel_version}"
-              exit 1
-            fi
-            echo "INFO: Using kernel version ${kernel_version}"
-          }
-          EOF
-        
+          sed -i 's/^build_kernel=(.*)$/build_kernel=("5.15.162")/' $script_path
+          sed -i 's/^auto_kernel="true"/auto_kernel="false"/' $script_path
+          sed -i 's/^kernel_version=.*/kernel_version="5.15.162"/' $script_path
+          
           # 修改 init_var 函数
           sed -i '/^init_var(/,/^}/c\
           init_var() {\
-            echo -e "${STEPS} Start Initializing Variables..."\
-            build_kernel=("${{ inputs.kernel_version }}")\
-            auto_kernel="false"\
-            kernel_version="${{ inputs.kernel_version }}"\
-            custom_name="${{ inputs.kernel_sign }}"\
-            package_list="${{ inputs.kernel_package }}"\
-            auto_patch="${{ inputs.auto_patch || false }}"\
-            repo_owner="${{ inputs.kernel_source }}"\
-            toolchain_name="${{ inputs.kernel_toolchain }}"\
-            compress_format="${{ inputs.compress_format }}"\
-          }' $temp_script
-        
-          # 在 get_kernel_source 和 compile_kernel 函数开始处添加版本检查
-          sed -i '/^get_kernel_source(/a\    check_kernel_version' $temp_script
-          sed -i '/^compile_kernel(/a\    check_kernel_version' $temp_script
-        
-          # 替换原始脚本
-          mv $temp_script $script_path
-        
+              echo -e "${STEPS} Start Initializing Variables..."\
+              build_kernel=("5.15.162")\
+              auto_kernel="false"\
+              kernel_version="5.15.162"\
+              custom_name="${{ inputs.kernel_sign }}"\
+              package_list="all"\
+              auto_patch="false"\
+              repo_owner="unifreq"\
+              toolchain_name="gcc"\
+              compress_format="xz"\
+          }' $script_path
+          
+          # 修改 get_kernel_source 函数
+          sed -i '/^get_kernel_source(/,/^}/c\
+          get_kernel_source() {\
+              cd ${current_path}\
+              echo -e "${STEPS} Start downloading the kernel source code..."\
+              [[ -d "${kernel_path}" ]] || mkdir -p ${kernel_path}\
+              server_kernel_repo="unifreq/linux-5.15.y"\
+              local_kernel_path="linux-5.15.y"\
+              if [[ ! -d "${kernel_path}/${local_kernel_path}" ]]; then\
+                  echo -e "${INFO} Start cloning from [ https://github.com/${server_kernel_repo} -b v5.15.162 ]"\
+                  git clone -q --single-branch --depth=1 --branch=v5.15.162 https://github.com/${server_kernel_repo} ${kernel_path}/${local_kernel_path}\
+                  [[ "${?}" -eq "0" ]] || error_msg "[ https://github.com/${server_kernel_repo} ] Clone failed."\
+              fi\
+              rm -f ${kernel_path}/${local_kernel_path}/localversion\
+          }' $script_path
+          
           # 打印修改后的关键部分
           echo "Modified script contents:"
           grep -n "^build_kernel=" $script_path
           grep -n "^auto_kernel=" $script_path
           grep -n "^kernel_version=" $script_path
-          grep -n "check_kernel_version" $script_path -A 10
           grep -n "init_var(" $script_path -A 15
-          grep -n "get_kernel_source(" $script_path -A 5
-          grep -n "compile_kernel(" $script_path -A 5
+          grep -n "get_kernel_source(" $script_path -A 15
 
       - name: Compile the kernel
         uses: kemp-zz/amlogic-s9xxx-armbian@main
         if: ${{ steps.mapped.outputs.status }} == 'success' && !cancelled()
-        env:
-          KERNEL_VERSION: ${{ inputs.kernel_version }}
-          AUTO_KERNEL: "false"
         with:
           build_target: kernel
-          kernel_version: ${{ inputs.kernel_version }}
-          kernel_auto: "false"
-          kernel_source: ${{ inputs.kernel_source }}
+          kernel_version: 5.15.162
+          kernel_auto: false
+          kernel_source: unifreq
           kernel_sign: ${{ inputs.kernel_sign }}
           kernel_config: ${{ inputs.kernel_config }}
-          kernel_package: ${{ inputs.kernel_package }}
-          kernel_toolchain: ${{ inputs.kernel_toolchain }}
-          compress_format: ${{ inputs.compress_format }}
 
-      - name: Debug information
-        if: always()
-        run: |
-          echo "Kernel version: ${{ inputs.kernel_version }}"
-          echo "Auto kernel: false"
-          echo "Build kernel array:"
-          grep "^build_kernel=" $script_path || echo "build_kernel not found"
-          echo "Environment variables:"
-          env | grep KERNEL
-          echo "Current directory contents:"
-          ls -R /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel || echo "Directory not found"
-          echo "Compile log (if exists):"
-          cat /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/compile.log || echo "Compile log not found"
       - name: Upload Kernel to Release
         uses: ncipollo/release-action@main
         if: ${{ env.PACKAGED_STATUS }} == 'success' && !cancelled()
@@ -240,3 +150,15 @@ jobs:
           artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Debug information
+        if: always()
+        run: |
+          echo "Kernel version: 5.15.162"
+          echo "Auto kernel: false"
+          echo "Build kernel array:"
+          grep "^build_kernel=" $script_path || echo "build_kernel not found"
+          echo "Current directory contents:"
+          ls -R /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel || echo "Directory not found"
+          echo "Compile log (if exists):"
+          cat /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/compile.log || echo "Compile log not found"
