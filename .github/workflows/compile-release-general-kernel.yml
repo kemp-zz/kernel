@@ -142,73 +142,77 @@ jobs:
 
       - name: Set kernel version
         run: |
-              echo "KERNEL_VERSION=${{ inputs.kernel_version }}" >> $GITHUB_ENV
-              echo "AUTO_KERNEL=false" >> $GITHUB_ENV
-
+          echo "KERNEL_VERSION=${{ inputs.kernel_version }}" >> $GITHUB_ENV
+          echo "AUTO_KERNEL=false" >> $GITHUB_ENV
+  
       - name: Modify armbian_compile_kernel_script.sh
         run: |
-              script_path="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/tools/script/armbian_compile_kernel_script.sh"
+          script_path="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/tools/script/armbian_compile_kernel_script.sh"
+          
+          # 直接修改关键变量
+          sed -i 's/^build_kernel=(.*)/build_kernel=("${{ inputs.kernel_version }}")/' $script_path
+          sed -i 's/^auto_kernel="true"/auto_kernel="false"/' $script_path
+          sed -i 's/^kernel_version=.*/kernel_version="${{ inputs.kernel_version }}"/' $script_path
         
-              # 直接修改关键变量
-              sed -i 's/^build_kernel=(.*)/build_kernel=("${{ inputs.kernel_version }}")/' $script_path
-              sed -i 's/^auto_kernel="true"/auto_kernel="false"/' $script_path
-              sed -i 's/^kernel_version=.*/kernel_version="${{ inputs.kernel_version }}"/' $script_path
+          # 修改 get_kernel_source 函数
+          sed -i '/^get_kernel_source(/,/^}/c\
+          get_kernel_source() {\
+          cd ${current_path}\
+          echo -e "${STEPS} Start downloading the kernel source code..."\
+          [[ -d "${kernel_path}" ]] || mkdir -p ${kernel_path}\
+          kernel_version="${{ inputs.kernel_version }}"\
+          build_kernel=("${kernel_version}")\
+          kernel_verpatch="$(echo ${kernel_version} | awk -F '"'"'."'"'" '"'"'{print $1"."$2}'"'"')"\
+          server_kernel_repo="${code_owner}/linux-${kernel_verpatch}.y"\
+          local_kernel_path="linux-${kernel_verpatch}.y"\
+          if [[ ! -d "${kernel_path}/${local_kernel_path}" ]]; then\
+            echo -e "${INFO} Start cloning from [ https://github.com/${server_kernel_repo} -b v${kernel_version} ]"\
+            git clone --depth=1 --single-branch --branch=v${kernel_version} https://github.com/${server_kernel_repo} ${kernel_path}/${local_kernel_path}\
+            if [ $? -ne 0 ]; then\
+              echo "Failed to clone kernel source"\
+              exit 1\
+            fi\
+          fi\
+          rm -f ${kernel_path}/${local_kernel_path}/localversion\
+          [[ "${auto_patch}" == "true" || "${auto_patch}" == "yes" ]] && apply_patch\
+          }' $script_path
         
-              # 修改 get_kernel_source 函数
-              sed -i '/^get_kernel_source(/,/^}/c\
-              get_kernel_source() {\
-              cd ${current_path}\
-                echo -e "${STEPS} Start downloading the kernel source code..."\
-                [[ -d "${kernel_path}" ]] || mkdir -p ${kernel_path}\
-                kernel_version="${{ inputs.kernel_version }}"\
-                build_kernel=("${kernel_version}")\
-                kernel_verpatch="$(echo ${kernel_version} | awk -F '"'"'."'"'" '"'"'{print $1"."$2}'"'"')"\
-                server_kernel_repo="${code_owner}/linux-${kernel_verpatch}.y"\
-                local_kernel_path="linux-${kernel_verpatch}.y"\
-                if [[ ! -d "${kernel_path}/${local_kernel_path}" ]]; then\
-                    echo -e "${INFO} Start cloning from [ https://github.com/${server_kernel_repo} -b v${kernel_version} ]"\
-                    git clone --depth=1 --single-branch --branch=v${kernel_version} https://github.com/${server_kernel_repo} ${kernel_path}/${local_kernel_path}\
-                fi\
-                rm -f ${kernel_path}/${local_kernel_path}/localversion\
-                [[ "${auto_patch}" == "true" || "${auto_patch}" == "yes" ]] && apply_patch\
-                  }' $script_path
+          # 修改 compile_kernel 函数
+          sed -i '/^compile_kernel(/,/^}/c\
+          compile_kernel() {\
+            cd ${kernel_path}/${local_kernel_path}\
+            echo "Current directory: $(pwd)"\
+            echo "Kernel version: ${kernel_version}"\
+            echo "Local kernel path: ${local_kernel_path}"\
+            make ${MAKE_SET_STRING} Image modules dtbs -j${PROCESS}\
+            if [ $? -eq 0 ]; then\
+              echo "Kernel compilation successful"\
+            else\
+            echo "Kernel compilation failed"\
+            exit 1\
+          fi\
+          make ${MAKE_SET_STRING} INSTALL_MOD_PATH=${output_path}/modules modules_install\
+          if [ $? -eq 0 ]; then\
+            echo "Modules installation successful"\
+            echo "Contents of ${output_path}/modules/lib/modules:"\
+            ls -R ${output_path}/modules/lib/modules\
+          else\
+            echo "Modules installation failed"\
+            exit 1\
+          fi\
+          STRIP="${CROSS_COMPILE}strip"\
+          find ${output_path}/modules -name "*.ko" -print0 | xargs -0 ${STRIP} --strip-debug 2>/dev/null\
+          headers_install\
+          }' $script_path
         
-              # 修改 compile_kernel 函数
-              sed -i '/^compile_kernel(/,/^}/c\
-                  compile_kernel() {\
-                  cd ${kernel_path}/${local_kernel_path}\
-                echo "Current directory: $(pwd)"\
-                echo "Kernel version: ${kernel_version}"\
-                echo "Local kernel path: ${local_kernel_path}"\
-                make ${MAKE_SET_STRING} Image modules dtbs -j${PROCESS}\
-                if [ $? -eq 0 ]; then\
-                    echo "Kernel compilation successful"\
-                else\
-                    echo "Kernel compilation failed"\
-                    exit 1\
-                fi\
-                make ${MAKE_SET_STRING} INSTALL_MOD_PATH=${output_path}/modules modules_install\
-                if [ $? -eq 0 ]; then\
-                    echo "Modules installation successful"\
-                    echo "Contents of ${output_path}/modules/lib/modules:"\
-                    ls -R ${output_path}/modules/lib/modules\
-                else\
-                    echo "Modules installation failed"\
-                    exit 1\
-                fi\
-                STRIP="${CROSS_COMPILE}strip"\
-                find ${output_path}/modules -name "*.ko" -print0 | xargs -0 ${STRIP} --strip-debug 2>/dev/null\
-                headers_install\
-                  }' $script_path
-        
-              # 打印修改后的关键部分
-              echo "Modified script contents:"
-              grep -n "^build_kernel=" $script_path
-              grep -n "^auto_kernel=" $script_path
-              grep -n "^kernel_version=" $script_path
-              grep -n "get_kernel_source(" $script_path -A 20
-              grep -n "compile_kernel(" $script_path -A 30
-      
+          # 打印修改后的关键部分
+          echo "Modified script contents:"
+          grep -n "^build_kernel=" $script_path
+          grep -n "^auto_kernel=" $script_path
+          grep -n "^kernel_version=" $script_path
+          grep -n "get_kernel_source(" $script_path -A 20
+          grep -n "compile_kernel(" $script_path -A 20
+
       - name: Compile the kernel
         uses: kemp-zz/amlogic-s9xxx-armbian@main
         if: ${{ steps.mapped.outputs.status }} == 'success' && !cancelled()
@@ -216,23 +220,25 @@ jobs:
          KERNEL_VERSION: ${{ env.KERNEL_VERSION }}
          AUTO_KERNEL: ${{ env.AUTO_KERNEL }}
         with:
-         build_target: kernel
-         kernel_version: ${{ env.KERNEL_VERSION }}
-         kernel_auto: ${{ env.AUTO_KERNEL }}
-         kernel_source: ${{ inputs.kernel_source }}
-         kernel_sign: ${{ inputs.kernel_sign }}
-         kernel_config: ${{ inputs.kernel_config }}
-         kernel_package: ${{ inputs.kernel_package }}
-         kernel_toolchain: ${{ inputs.kernel_toolchain }}
-         compress_format: ${{ inputs.compress_format }}
+          build_target: kernel
+          kernel_version: ${{ env.KERNEL_VERSION }}
+          kernel_auto: ${{ env.AUTO_KERNEL }}
+          kernel_source: ${{ inputs.kernel_source }}
+          kernel_sign: ${{ inputs.kernel_sign }}
+          kernel_config: ${{ inputs.kernel_config }}
+          kernel_package: ${{ inputs.kernel_package }}
+          kernel_toolchain: ${{ inputs.kernel_toolchain }}
+          compress_format: ${{ inputs.compress_format }}
 
       - name: Debug information
         if: always()
         run: |
-         echo "Kernel version: ${{ env.KERNEL_VERSION }}"
-         echo "Auto kernel: ${{ env.AUTO_KERNEL }}"
-         echo "Contents of output directory:"
-         ls -R /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output
+          echo "Kernel version: ${{ env.KERNEL_VERSION }}"
+          echo "Auto kernel: ${{ env.AUTO_KERNEL }}"
+          echo "Contents of current directory:"
+          ls -R
+          echo "Contents of /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel:"
+          ls -R /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel || true
 
       - name: Upload Kernel to Release
         uses: ncipollo/release-action@main
