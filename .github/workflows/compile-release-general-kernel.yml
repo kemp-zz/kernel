@@ -173,6 +173,13 @@ jobs:
           
           echo "Final Makefile content:"
           cat Makefile | grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) ='
+          
+      - name: Check kernel source
+        run: |
+          echo "Kernel source directory contents:"
+          ls -la ${{ github.workspace }}/kernel-source
+          echo "Kernel config directory contents:"
+          ls -la ${{ github.workspace }}/kernel-config/release/general     
 
       - name: Compile the kernel
         uses: kemp-zz/amlogic-s9xxx-armbian@main
@@ -181,10 +188,10 @@ jobs:
           kernel_source: ${{ github.workspace }}/kernel-source
           kernel_version: 5.15.162
           kernel_auto: false
-          kernel_package: ${{ inputs.kernel_package }}
+          kernel_package: all
           kernel_toolchain: ${{ inputs.kernel_toolchain }}
           kernel_sign: ${{ inputs.kernel_sign }}
-          kernel_config: ${{ inputs.kernel_config }}
+          kernel_config: release/general
           compress_format: ${{ inputs.compress_format }}
 
       - name: Upload Kernel to Release
