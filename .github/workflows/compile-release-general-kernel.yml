@@ -101,32 +101,48 @@ jobs:
     
           # 修改脚本
           sed -i 's/^build_kernel=(.*)$/build_kernel=("5.15.162")/' $script_path
-          sed -i 's/^auto_kernel="true"/auto_kernel="false"/' $script_path
-          sed -i 's/^kernel_version=.*/kernel_version="5.15.162"/' $script_path
+          sed -i 's/^auto_kernel=.*$/auto_kernel="false"/' $script_path
+          sed -i 's/^kernel_version=.*$/kernel_version="5.15.162"/' $script_path
+          
+          # 注释掉 root 用户和架构检查
+          sed -i 's/$$$$ "$(id -u)" == "0" $$$$ || error_msg/# [[ "$(id -u)" == "0" ]] || error_msg/' $script_path
+          sed -i 's/$$$$ "${arch_info}" == "aarch64" $$$$ || error_msg/# [[ "${arch_info}" == "aarch64" ]] || error_msg/' $script_path
+    
+          # 修改 query_version 部分，确保它不会在 auto_kernel 为 false 时执行
+          sed -i 's/$$$$ "${auto_kernel}" == "true" || "${auto_kernel}" == "yes" $$$$ && query_version/if [[ "${auto_kernel}" == "true" || "${auto_kernel}" == "yes" ]]; then query_version; else echo "Skipping query_version as auto_kernel is ${auto_kernel}"; fi/' $script_path
     
           # 打印整个修改后的脚本内容
           echo "Full modified script contents:"
           cat $script_path
     
-          # 逐步执行脚本的各个部分
-          echo "Executing script parts:"
-    
           # Source 整个脚本
           source $script_path
     
-          # 1. 打印关键变量
-          echo "Key variables:"
-          echo "build_kernel=${build_kernel[@]}"
-          echo "auto_kernel=${auto_kernel}"
-          echo "kernel_version=${kernel_version}"
+          # 执行脚本的主要部分
+          echo "Executing main script parts:"
     
-          # 2. 执行 init_var 函数
-          echo "Executing init_var function..."
+          # 初始化变量
           init_var
     
-          # 3. 执行 get_kernel_source 函数
-          echo "Executing get_kernel_source function..."
-          get_kernel_source
+          # 检查和安装工具链
+          toolchain_check
+    
+          # 显示编译设置
+          echo -e "${INFO} Kernel compilation toolchain: [ ${toolchain_name} ]"
+          echo -e "${INFO} Kernel from: [ ${code_owner} ]"
+          echo -e "${INFO} Kernel patch: [ ${auto_patch} ]"
+          echo -e "${INFO} Kernel arch: [ ${SRC_ARCH} ]"
+          echo -e "${INFO} Kernel Package: [ ${package_list} ]"
+          echo -e "${INFO} kernel signature: [ ${custom_name} ]"
+          echo -e "${INFO} Latest kernel version: [ ${auto_kernel} ]"
+          echo -e "${INFO} kernel initrd compress: [ ${compress_format} ]"
+          echo -e "${INFO} Kernel List: [ $(echo ${build_kernel[*]} | xargs) ] \n"
+    
+          # 显示服务器开始信息
+          echo -e "${INFO} Server space usage before starting to compile: \n$(df -hT ${kernel_path}) \n"
+    
+          # 编译内核
+          loop_recompile
     
           echo "Script execution completed"
 
