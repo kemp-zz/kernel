@@ -98,7 +98,13 @@ jobs:
           sudo apt-get update
           sudo apt-get -y install $(curl -fsSL https://is.gd/depend_ubuntu2204_armbian)
           sudo timedatectl set-timezone "${TZ}"
-
+      - name: Debug Environment
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la
+          echo "GitHub Workspace: $GITHUB_WORKSPACE"
+       
       - name: Compile the kernel
         uses: kemp-zz/amlogic-s9xxx-armbian@main
         with:
@@ -110,6 +116,25 @@ jobs:
           kernel_sign: ${{ github.event.inputs.kernel_sign || '-1-7d9483ff60109a7caf36266e8917014e' }}
           kernel_config: ${{ github.event.inputs.kernel_config || 'kernel-config/release/general' }}
           compress_format: ${{ github.event.inputs.compress_format || 'xz' }}
+        env:
+          ACTIONS_STEP_DEBUG: true
+
+      - name: Check compilation output
+        if: failure()
+        run: |
+          echo "Compilation failed. Checking output..."
+          if [ -d "${{ github.workspace }}/compile-kernel" ]; then
+            echo "Compile kernel directory contents:"
+            ls -R ${{ github.workspace }}/compile-kernel
+            if [ -f "${{ github.workspace }}/compile-kernel/output/compile.log" ]; then
+              echo "Last 100 lines of compile.log:"
+              tail -n 100 ${{ github.workspace }}/compile-kernel/output/compile.log
+            else
+              echo "compile.log not found"
+            fi
+          else
+            echo "compile-kernel directory not found"
+          fi
 
       - name: Upload Kernel to Release
         uses: ncipollo/release-action@main
@@ -124,6 +149,5 @@ jobs:
         if: failure()
         run: |
           echo "The kernel compilation process has failed."
-          exit 1
-          echo "The kernel compilation process has failed."
+          echo "GitHub Action Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           exit 1
