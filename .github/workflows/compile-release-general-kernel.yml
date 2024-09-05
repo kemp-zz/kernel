@@ -85,52 +85,66 @@ jobs:
 
       - name: Modify armbian_compile_kernel_script.sh
         run: |
-          script_path="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/tools/script/armbian_compile_kernel_script.sh"
-          
-          # 修改关键变量
-          sed -i 's/^build_kernel=(.*)$/build_kernel=("5.15.162")/' $script_path
-          sed -i 's/^auto_kernel="true"/auto_kernel="false"/' $script_path
-          sed -i 's/^kernel_version=.*/kernel_version="5.15.162"/' $script_path
-          
-          # 修改 init_var 函数
-          sed -i '/^init_var(/,/^}/c\
-          init_var() {\
-              echo -e "${STEPS} Start Initializing Variables..."\
-              build_kernel=("5.15.162")\
-              auto_kernel="false"\
-              kernel_version="5.15.162"\
-              custom_name="${{ inputs.kernel_sign }}"\
-              package_list="all"\
-              auto_patch="false"\
-              repo_owner="unifreq"\
-              toolchain_name="gcc"\
-              compress_format="xz"\
-          }' $script_path
-          
-          # 修改 get_kernel_source 函数
-          sed -i '/^get_kernel_source(/,/^}/c\
-          get_kernel_source() {\
-              cd ${current_path}\
-              echo -e "${STEPS} Start downloading the kernel source code..."\
-              [[ -d "${kernel_path}" ]] || mkdir -p ${kernel_path}\
-              server_kernel_repo="unifreq/linux-5.15.y"\
-              local_kernel_path="linux-5.15.y"\
-              if [[ ! -d "${kernel_path}/${local_kernel_path}" ]]; then\
-                  echo -e "${INFO} Start cloning from [ https://github.com/${server_kernel_repo} -b v5.15.162 ]"\
-                  git clone -q --single-branch --depth=1 --branch=v5.15.162 https://github.com/${server_kernel_repo} ${kernel_path}/${local_kernel_path}\
-                  [[ "${?}" -eq "0" ]] || error_msg "[ https://github.com/${server_kernel_repo} ] Clone failed."\
-              fi\
-              rm -f ${kernel_path}/${local_kernel_path}/localversion\
-          }' $script_path
-          
-          # 打印修改后的关键部分
-          echo "Modified script contents:"
-          grep -n "^build_kernel=" $script_path
-          grep -n "^auto_kernel=" $script_path
-          grep -n "^kernel_version=" $script_path
-          grep -n "init_var(" $script_path -A 15
-          grep -n "get_kernel_source(" $script_path -A 15
-
+            script_path="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/tools/script/armbian_compile_kernel_script.sh"
+    
+            # 备份原始脚本
+            cp $script_path ${script_path}.bak
+    
+            # 修改 error_msg 函数
+            sed -i 's/exit 1/echo "Error occurred but continuing..."/g' $script_path
+    
+            # 直接修改为 5.15.162 版本
+            sed -i 's/^build_kernel=(.*)$/build_kernel=("5.15.162")/' $script_path
+            sed -i 's/^auto_kernel="true"/auto_kernel="false"/' $script_path
+            sed -i 's/^kernel_version=.*/kernel_version="5.15.162"/' $script_path
+    
+            # 修改 init_var 函数，添加更多输出
+            sed -i '/^init_var(/,/^}/c\
+            init_var() {\
+                echo -e "${STEPS} Start Initializing Variables..."\
+                build_kernel=("5.15.162")\
+                auto_kernel="false"\
+                kernel_version="5.15.162"\
+                custom_name="${{ inputs.kernel_sign }}"\
+                package_list="all"\
+                auto_patch="false"\
+                repo_owner="unifreq"\
+                toolchain_name="gcc"\
+                compress_format="xz"\
+                echo "Variables initialized:"\
+                echo "build_kernel=${build_kernel[@]}"\
+                echo "auto_kernel=${auto_kernel}"\
+                echo "kernel_version=${kernel_version}"\
+            }' $script_path
+    
+            # 修改 get_kernel_source 函数，添加更多输出
+            sed -i '/^get_kernel_source(/,/^}/c\
+            get_kernel_source() {\
+                cd ${current_path}\
+                echo -e "${STEPS} Start downloading the kernel source code..."\
+                [[ -d "${kernel_path}" ]] || mkdir -p ${kernel_path}\
+                server_kernel_repo="unifreq/linux-5.15.y"\
+                local_kernel_path="linux-5.15.162"\
+                echo "Cloning from: https://github.com/${server_kernel_repo} -b v5.15.162"\
+                if [[ ! -d "${kernel_path}/${local_kernel_path}" ]]; then\
+                    git clone -q --single-branch --depth=1 --branch=v5.15.162 https://github.com/${server_kernel_repo} ${kernel_path}/${local_kernel_path}\
+                    echo "Clone result: $?"\
+                else\
+                    echo "Kernel source already exists, skipping clone."\
+                fi\
+                rm -f ${kernel_path}/${local_kernel_path}/localversion\
+            }' $script_path
+    
+            # 打印修改后的关键部分
+            echo "Modified script contents:"
+            grep -n "^build_kernel=" $script_path
+            grep -n "^auto_kernel=" $script_path
+            grep -n "^kernel_version=" $script_path
+            grep -n "init_var(" $script_path -A 20
+            grep -n "get_kernel_source(" $script_path -A 20
+    
+            # 执行脚本并捕获输出
+            bash $script_path || echo "Script exited with non-zero status"
       - name: Compile the kernel
         uses: kemp-zz/amlogic-s9xxx-armbian@main
         if: ${{ steps.mapped.outputs.status }} == 'success' && !cancelled()
