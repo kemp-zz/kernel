@@ -141,28 +141,41 @@ jobs:
           ln -sf /builder/output /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/output
           echo "status=success" >> ${GITHUB_OUTPUT}
 
-      - name: Check for 5.15.162 commit
-        id: check_commit
+      - name: Check for 5.15.162 or closest version
+        id: check_version
         run: |
-          git clone --depth=1 https://github.com/unifreq/linux-5.15.y.git /tmp/kernel
+          git clone --depth=1000 https://github.com/unifreq/linux-5.15.y.git /tmp/kernel
           cd /tmp/kernel
-          if git cat-file -e 244dce52c74abd24de772a07f83522493c888412; then
-            echo "commit_exists=true" >> $GITHUB_OUTPUT
-            echo "5.15.162 commit (244dce52c74abd24de772a07f83522493c888412) found."
+          if git rev-parse --verify 244dce52c74abd24de772a07f83522493c888412 >/dev/null 2>&1; then
+            echo "version=5.15.162" >> $GITHUB_OUTPUT
+            echo "commit=244dce52c74abd24de772a07f83522493c888412" >> $GITHUB_OUTPUT
           else
-            echo "commit_exists=false" >> $GITHUB_OUTPUT
-            echo "5.15.162 commit not found."
+            latest_tag=$(git describe --tags --abbrev=0 --match "v5.15.*" 2>/dev/null || echo "")
+            if [ -n "$latest_tag" ]; then
+              echo "version=${latest_tag#v}" >> $GITHUB_OUTPUT
+              echo "commit=$(git rev-parse $latest_tag)" >> $GITHUB_OUTPUT
+            else
+              latest_commit=$(git log --grep="Linux 5.15." --format="%H" -n 1)
+              if [ -n "$latest_commit" ]; then
+                version=$(git log -1 --format=%s $latest_commit | grep -oP 'Linux \K[0-9]+\.[0-9]+\.[0-9]+')
+                echo "version=$version" >> $GITHUB_OUTPUT
+                echo "commit=$latest_commit" >> $GITHUB_OUTPUT
+              else
+                echo "No suitable 5.15.x version found."
+                exit 1
+              fi
+            fi
           fi
-          
+
       - name: Modify compile kernel script
-        if: steps.check_commit.outputs.commit_exists == 'true'
+        if: steps.check_version.outputs.version != ''
         run: |
           script_path="/home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/tools/script/armbian_compile_kernel_script.sh"
-          sudo sed -i 's/git clone -q --single-branch --depth=1/git clone -q --single-branch --depth=1 /' "$script_path"
+          sudo sed -i 's/git clone -q --single-branch --depth=1/git clone -q --single-branch --depth=1000/' "$script_path"
           sudo sed -i '/get_kernel_source()/a\
             cd ${kernel_path}/${local_kernel_path}\
-            git checkout 244dce52c74abd24de772a07f83522493c888412\
-            kernel_version="5.15.162"\
+            git checkout ${{ steps.check_version.outputs.commit }}\
+            kernel_version="${{ steps.check_version.outputs.version }}"\
             build_kernel=("${kernel_version}")' "$script_path"
           sudo sed -i '/query_version()/,/}/c\
           query_version() {\
@@ -170,13 +183,13 @@ jobs:
           }' "$script_path"
 
       - name: Compile the kernel
-        if: steps.check_commit.outputs.commit_exists == 'true'
+        if: steps.check_version.outputs.version != ''
         uses: ophub/amlogic-s9xxx-armbian@main
         with:
           build_target: kernel
           kernel_source: ${{ inputs.kernel_source }}
-          kernel_version: ${{ inputs.kernel_version }}
-          kernel_auto: ${{ inputs.kernel_auto }}
+          kernel_version: ${{ steps.check_version.outputs.version }}
+          kernel_auto: false
           kernel_package: ${{ inputs.kernel_package }}
           kernel_toolchain: ${{ inputs.kernel_toolchain }}
           kernel_sign: ${{ inputs.kernel_sign }}
@@ -184,16 +197,16 @@ jobs:
           compress_format: ${{ inputs.compress_format }}
 
       - name: Upload Kernel to Release
-        if: steps.check_commit.outputs.commit_exists == 'true' && env.PACKAGED_STATUS == 'success' && !cancelled()
+        if: steps.check_version.outputs.version != '' && env.PACKAGED_STATUS == 'success' && !cancelled()
         uses: ncipollo/release-action@main
         with:
-          tag: kernel_stable
+          tag: kernel_${{ steps.check_version.outputs.version }}
           artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Notification of build failure
-        if: steps.check_commit.outputs.commit_exists == 'false'
+        if: steps.check_version.outputs.version == ''
         run: |
-          echo "The 5.15.162 commit was not found in the repository. The kernel compilation process has been skipped."
+          echo "No suitable 5.15.x kernel version was found in the repository. The kernel compilation process has been skipped."
           exit 1
