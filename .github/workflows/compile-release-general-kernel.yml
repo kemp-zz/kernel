@@ -140,70 +140,76 @@ jobs:
           sudo chown -R runner.runner /builder
           df -Th
 
-      - name: Create a mapped directory
-        id: mapped
-        working-directory: /builder
-        run: |
-          df -hT ${PWD}
-          mkdir -p /builder/{kernel,output}
-          ln -sf /builder/kernel /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/kernel
-          ln -sf /builder/output /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output
-          echo "status=success" >> ${GITHUB_OUTPUT}
-
       - name: Modify armbian_compile_kernel_script.sh
         run: |
           script_path="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/tools/script/armbian_compile_kernel_script.sh"
+          temp_script="/tmp/temp_armbian_compile_kernel_script.sh"
+    
+          # 创建临时脚本文件
+          cp $script_path $temp_script
     
           # 修改内核源
-          sed -i 's/^repo_owner="unifreq"/repo_owner="${{ inputs.kernel_source }}"/' $script_path
+          sed -i 's/^repo_owner="unifreq"/repo_owner="${{ inputs.kernel_source }}"/' $temp_script
     
           # 修改内核版本和相关逻辑
-          sed -i 's/^build_kernel=(.*)/build_kernel=("${{ inputs.kernel_version }}")/' $script_path
-          sed -i 's/^auto_kernel="true"/auto_kernel="false"/' $script_path
+          sed -i 's/^build_kernel=(.*)/build_kernel=("${{ inputs.kernel_version }}")/' $temp_script
+          sed -i 's/^auto_kernel="true"/auto_kernel="false"/' $temp_script
     
           # 修改 init_var 函数
-          sed -i '/^init_var(/,/^}/c\
-          init_var() {\
-          echo -e "${STEPS} Start Initializing Variables..."\
-          build_kernel=("${{ inputs.kernel_version }}")\
-          auto_kernel="false"\
-          custom_name="${{ inputs.kernel_sign }}"\
-          package_list="${{ inputs.kernel_package }}"\
-          auto_patch="${{ inputs.auto_patch || false }}"\
-          repo_owner="${{ inputs.kernel_source }}"\
-          toolchain_name="${{ inputs.kernel_toolchain }}"\
-          compress_format="${{ inputs.compress_format }}"\
-            }' $script_path
+          cat << 'EOF' > /tmp/init_var_func
+            init_var() {
+          echo -e "${STEPS} Start Initializing Variables..."
+          build_kernel=("${{ inputs.kernel_version }}")
+          auto_kernel="false"
+          custom_name="${{ inputs.kernel_sign }}"
+          package_list="${{ inputs.kernel_package }}"
+          auto_patch="${{ inputs.auto_patch || false }}"
+          repo_owner="${{ inputs.kernel_source }}"
+          toolchain_name="${{ inputs.kernel_toolchain }}"
+          compress_format="${{ inputs.compress_format }}"
+      }
+      EOF
+          sed -i '/^init_var(/,/^}/d' $temp_script
+          cat /tmp/init_var_func >> $temp_script
     
           # 修改 query_version 函数
-          sed -i '/^query_version(/,/^}/c\
-            query_version() {\
-          echo "Using specified kernel version: ${{ inputs.kernel_version }}"\
-          build_kernel=("${{ inputs.kernel_version }}")\
-            }' $script_path
+          cat << 'EOF' > /tmp/query_version_func
+      query_version() {
+          echo "Using specified kernel version: ${{ inputs.kernel_version }}"
+          build_kernel=("${{ inputs.kernel_version }}")
+      }
+      EOF
+          sed -i '/^query_version(/,/^}/d' $temp_script
+          cat /tmp/query_version_func >> $temp_script
     
           # 修改 get_kernel_source 函数
-          sed -i '/^get_kernel_source(/,/^}/c\
-            get_kernel_source() {\
-          cd ${current_path}\
-          echo -e "${STEPS} Start downloading the kernel source code..."\
-          [[ -d "${kernel_path}" ]] || mkdir -p ${kernel_path}\
-          kernel_version="${{ inputs.kernel_version }}"\
-          kernel_verpatch="$(echo ${kernel_version} | awk -F '"'"'."'"'" '"'"'{print $1"."$2}'"'"')"\
-          if [[ -z "${code_repo}" ]]; then\
-              server_kernel_repo="${code_owner}/linux-${kernel_verpatch}.y"\
-              local_kernel_path="linux-${kernel_verpatch}.y"\
-          else\
-              server_kernel_repo="${code_owner}/${code_repo}"\
-              local_kernel_path="${code_repo}-${code_branch}"\
-          fi\
-               if [[ ! -d "${kernel_path}/${local_kernel_path}" ]]; then\
-              echo -e "${INFO} Start cloning from [ https://github.com/${server_kernel_repo} -b v${kernel_version} ]"\
-              git clone --depth=1 --single-branch --branch=v${kernel_version} https://github.com/${server_kernel_repo} ${kernel_path}/${local_kernel_path}\
-          fi\
-          rm -f ${kernel_path}/${local_kernel_path}/localversion\
-          [[ "${auto_patch}" == "true" || "${auto_patch}" == "yes" ]] && apply_patch\
-            }' $script_path
+          cat << 'EOF' > /tmp/get_kernel_source_func
+      get_kernel_source() {
+          cd ${current_path}
+          echo -e "${STEPS} Start downloading the kernel source code..."
+          [[ -d "${kernel_path}" ]] || mkdir -p ${kernel_path}
+          kernel_version="${{ inputs.kernel_version }}"
+          kernel_verpatch="$(echo ${kernel_version} | awk -F '.' '{print $1"."$2}')"
+          if [[ -z "${code_repo}" ]]; then
+              server_kernel_repo="${code_owner}/linux-${kernel_verpatch}.y"
+              local_kernel_path="linux-${kernel_verpatch}.y"
+          else
+              server_kernel_repo="${code_owner}/${code_repo}"
+              local_kernel_path="${code_repo}-${code_branch}"
+          fi
+          if [[ ! -d "${kernel_path}/${local_kernel_path}" ]]; then
+              echo -e "${INFO} Start cloning from [ https://github.com/${server_kernel_repo} -b v${kernel_version} ]"
+              git clone --depth=1 --single-branch --branch=v${kernel_version} https://github.com/${server_kernel_repo} ${kernel_path}/${local_kernel_path}
+          fi
+          rm -f ${kernel_path}/${local_kernel_path}/localversion
+          [[ "${auto_patch}" == "true" || "${auto_patch}" == "yes" ]] && apply_patch
+      }
+      EOF
+          sed -i '/^get_kernel_source(/,/^}/d' $temp_script
+          cat /tmp/get_kernel_source_func >> $temp_script
+          
+          # 替换原始脚本
+          mv $temp_script $script_path
     
           # 打印修改后的关键部分
           echo "Modified script contents:"
@@ -213,7 +219,6 @@ jobs:
           grep -n "init_var(" $script_path -A 10
           grep -n "query_version(" $script_path -A 5
           grep -n "get_kernel_source(" $script_path -A 20
-
       - name: Compile the kernel
         uses: kemp-zz/amlogic-s9xxx-armbian@main
         if: ${{ steps.mapped.outputs.status }} == 'success' && !cancelled()
