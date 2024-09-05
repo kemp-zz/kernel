@@ -148,19 +148,18 @@ jobs:
       - name: Modify armbian_compile_kernel_script.sh
         run: |
           script_path="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/tools/script/armbian_compile_kernel_script.sh"
-          temp_script="/tmp/temp_armbian_compile_kernel_script.sh"
         
-          # 创建临时脚本文件
-          cp $script_path $temp_script
+          # 备份原始脚本
+          cp $script_path ${script_path}.bak
         
-          # 直接修改关键变量
-          sed -i 's/^build_kernel=(.*)/build_kernel=("${{ inputs.kernel_version }}")/' $temp_script
-          sed -i 's/^auto_kernel="true"/auto_kernel="false"/' $temp_script
-          sed -i 's/^kernel_version=.*/kernel_version="${{ inputs.kernel_version }}"/' $temp_script
-        
+          # 修改关键变量
+          sed -i 's/^build_kernel=(.*)/build_kernel=("${{ inputs.kernel_version }}")/' $script_path
+          sed -i 's/^auto_kernel="true"/auto_kernel="false"/' $script_path
+          sed -i 's/^kernel_version=.*/kernel_version="${{ inputs.kernel_version }}"/' $script_path
+          
           # 添加版本检查函数
-          cat << 'EOF' >> $temp_script
-  
+          cat << 'EOF' >> $script_path
+
           check_kernel_version() {
             if [[ "${kernel_version}" != "${{ inputs.kernel_version }}" ]]; then
               echo "ERROR: Kernel version mismatch. Expected ${{ inputs.kernel_version }}, got ${kernel_version}"
@@ -170,44 +169,43 @@ jobs:
           }
           EOF
         
-          # 修改 get_kernel_source 函数
-          sed -i '/^get_kernel_source(/,/^}/c\
-          get_kernel_source() {\
-            check_kernel_version\
-            cd ${current_path}\
-            echo -e "${STEPS} Start downloading the kernel source code..."\
-            [[ -d "${kernel_path}" ]] || mkdir -p ${kernel_path}\
-            kernel_version="${{ inputs.kernel_version }}"\
-            build_kernel=("${kernel_version}")\
-            kernel_verpatch="$(echo ${kernel_version} | awk -F '"'"'."'"'" '"'"'{print $1"."$2}'"'"')"\
-           server_kernel_repo="${code_owner}/linux-${kernel_verpatch}.y"\
-            local_kernel_path="linux-${kernel_verpatch}.y"\
-            if [[ ! -d "${kernel_path}/${local_kernel_path}" ]]; then\
-              echo -e "${INFO} Start cloning from [ https://github.com/${server_kernel_repo} -b v${kernel_version} ]"\
-              git clone --depth=1 --single-branch --branch=v${kernel_version} https://github.com/${server_kernel_repo} ${kernel_path}/${local_kernel_path}\
-              if [ $? -ne 0 ]; then\
-                echo "Failed to clone kernel source"\
-              exit 1\
-              fi\
-            fi\
-            rm -f ${kernel_path}/${local_kernel_path}/localversion\
-            [[ "${auto_patch}" == "true" || "${auto_patch}" == "yes" ]] && apply_patch\
-          }' $temp_script
-        
-          # 在 compile_kernel 函数开始时添加版本检查
-          sed -i '/^compile_kernel(/a\    check_kernel_version' $temp_script
-        
-          # 替换原始脚本
-          mv $temp_script $script_path
-        
+          # 在 get_kernel_source 和 compile_kernel 函数开始处添加版本检查
+          sed -i '/^get_kernel_source(/a\    check_kernel_version' $script_path
+          sed -i '/^compile_kernel(/a\    check_kernel_version' $script_path
+          
           # 打印修改后的关键部分
           echo "Modified script contents:"
           grep -n "^build_kernel=" $script_path
           grep -n "^auto_kernel=" $script_path
           grep -n "^kernel_version=" $script_path
           grep -n "check_kernel_version" $script_path -A 10
-          grep -n "get_kernel_source(" $script_path -A 20
+          grep -n "get_kernel_source(" $script_path -A 5
           grep -n "compile_kernel(" $script_path -A 5
+
+      - name: Compile the kernel
+        uses: kemp-zz/amlogic-s9xxx-armbian@main
+        if: ${{ steps.mapped.outputs.status }} == 'success' && !cancelled()
+        env:
+          KERNEL_VERSION: ${{ env.KERNEL_VERSION }}
+          AUTO_KERNEL: false
+        with:
+          build_target: kernel
+          kernel_version: ${{ env.KERNEL_VERSION }}
+          kernel_auto: false
+          kernel_source: ${{ inputs.kernel_source }}
+          kernel_sign: ${{ inputs.kernel_sign }}
+          kernel_config: ${{ inputs.kernel_config }}
+          kernel_package: ${{ inputs.kernel_package }}
+          kernel_toolchain: ${{ inputs.kernel_toolchain }}
+          compress_format: ${{ inputs.compress_format }}
+
+      - name: Debug information
+        if: always()
+        run: |
+          echo "Kernel version: ${{ env.KERNEL_VERSION }}"
+          echo "Auto kernel: false"
+          echo "Contents of modified script:"
+          cat $script_path
 
       - name: Compile the kernel
         uses: kemp-zz/amlogic-s9xxx-armbian@main
