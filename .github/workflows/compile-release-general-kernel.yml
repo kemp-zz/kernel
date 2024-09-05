@@ -85,7 +85,16 @@ jobs:
 
       - name: Modify and Debug armbian_compile_kernel_script.sh
         run: |
-          script_path="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/tools/script/armbian_compile_kernel_script.sh"
+          # 确保我们在正确的目录
+          cd /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel
+
+          script_path="./tools/script/armbian_compile_kernel_script.sh"
+    
+          # 检查脚本是否存在
+          if [ ! -f "$script_path" ]; then
+            echo "Error: Script file not found at $script_path"
+            exit 1
+          fi
     
           # 备份原始脚本
           cp $script_path ${script_path}.bak
@@ -102,21 +111,21 @@ jobs:
           # 逐步执行脚本的各个部分
           echo "Executing script parts:"
     
-          # 1. 设置变量
-          echo "Setting variables..."
-          source <(grep -E '^[a-zA-Z_]+=' $script_path)
+          # Source 整个脚本
+          source $script_path
+    
+          # 1. 打印关键变量
+          echo "Key variables:"
           echo "build_kernel=${build_kernel[@]}"
           echo "auto_kernel=${auto_kernel}"
           echo "kernel_version=${kernel_version}"
     
           # 2. 执行 init_var 函数
           echo "Executing init_var function..."
-          source <(sed -n '/^init_var/,/^}/p' $script_path)
           init_var
     
           # 3. 执行 get_kernel_source 函数
           echo "Executing get_kernel_source function..."
-          source <(sed -n '/^get_kernel_source/,/^}/p' $script_path)
           get_kernel_source
     
           echo "Script execution completed"
