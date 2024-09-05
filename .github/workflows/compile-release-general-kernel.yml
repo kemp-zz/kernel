@@ -161,9 +161,9 @@ jobs:
           sed -i 's/^build_kernel=(.*)/build_kernel=("${{ inputs.kernel_version }}")/' $script_path
           sed -i 's/^auto_kernel="true"/auto_kernel="false"/' $script_path
     
-          # 修改 init_var 函数，确保使用输入的内核版本
-          sed -i '/^init_var()/,/^}/c\
-            init_var() {\
+          # 修改 init_var 函数
+          sed -i '/^init_var(/,/^}/c\
+          init_var() {\
           echo -e "${STEPS} Start Initializing Variables..."\
           build_kernel=("${{ inputs.kernel_version }}")\
           auto_kernel="false"\
@@ -175,21 +175,21 @@ jobs:
           compress_format="${{ inputs.compress_format }}"\
             }' $script_path
     
-          # 修改 query_version 函数，跳过在线查询
-          sed -i '/^query_version()/,/^}/c\
+          # 修改 query_version 函数
+          sed -i '/^query_version(/,/^}/c\
             query_version() {\
           echo "Using specified kernel version: ${{ inputs.kernel_version }}"\
           build_kernel=("${{ inputs.kernel_version }}")\
             }' $script_path
     
-          # 修改 get_kernel_source 函数，使用指定的版本
-          sed -i '/^get_kernel_source()/,/^}/c\
+          # 修改 get_kernel_source 函数
+          sed -i '/^get_kernel_source(/,/^}/c\
             get_kernel_source() {\
           cd ${current_path}\
           echo -e "${STEPS} Start downloading the kernel source code..."\
           [[ -d "${kernel_path}" ]] || mkdir -p ${kernel_path}\
           kernel_version="${{ inputs.kernel_version }}"\
-          kernel_verpatch="$(echo ${kernel_version} | awk -F '.' '{print $1"."$2}')"\
+          kernel_verpatch="$(echo ${kernel_version} | awk -F '"'"'."'"'" '"'"'{print $1"."$2}'"'"')"\
           if [[ -z "${code_repo}" ]]; then\
               server_kernel_repo="${code_owner}/linux-${kernel_verpatch}.y"\
               local_kernel_path="linux-${kernel_verpatch}.y"\
@@ -197,7 +197,7 @@ jobs:
               server_kernel_repo="${code_owner}/${code_repo}"\
               local_kernel_path="${code_repo}-${code_branch}"\
           fi\
-          if [[ ! -d "${kernel_path}/${local_kernel_path}" ]]; then\
+               if [[ ! -d "${kernel_path}/${local_kernel_path}" ]]; then\
               echo -e "${INFO} Start cloning from [ https://github.com/${server_kernel_repo} -b v${kernel_version} ]"\
               git clone --depth=1 --single-branch --branch=v${kernel_version} https://github.com/${server_kernel_repo} ${kernel_path}/${local_kernel_path}\
           fi\
@@ -210,9 +210,9 @@ jobs:
           grep -n "^repo_owner=" $script_path
           grep -n "^build_kernel=" $script_path
           grep -n "^auto_kernel=" $script_path
-          grep -n "init_var()" $script_path -A 10
-          grep -n "query_version()" $script_path -A 5
-          grep -n "get_kernel_source()" $script_path -A 20
+          grep -n "init_var(" $script_path -A 10
+          grep -n "query_version(" $script_path -A 5
+          grep -n "get_kernel_source(" $script_path -A 20
 
       - name: Compile the kernel
         uses: kemp-zz/amlogic-s9xxx-armbian@main
