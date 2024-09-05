@@ -133,13 +133,18 @@ jobs:
           echo "Final Makefile content:"
           cat Makefile | grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) ='
 
+      - name: Prepare kernel source for compilation
+        run: |
+          mkdir -p /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/kernel
+          cp -r kernel-source/* /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/kernel/
+
       - name: Compile the kernel
         uses: kemp-zz/amlogic-s9xxx-armbian@main
         with:
           build_target: kernel
-          kernel_source: kernel-source
+          kernel_source: local
           kernel_version: ${{ github.event.inputs.kernel_version || '5.15.162' }}
-          kernel_auto: ${{ github.event.inputs.kernel_auto }}
+          kernel_auto: false
           kernel_package: ${{ github.event.inputs.kernel_package || 'all' }}
           kernel_toolchain: ${{ github.event.inputs.kernel_toolchain || 'gcc' }}
           kernel_sign: ${{ github.event.inputs.kernel_sign || '-ophub' }}
