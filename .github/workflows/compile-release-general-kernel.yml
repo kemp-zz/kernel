@@ -1,96 +1,172 @@
 name: Compile release general kernel
 
 on:
+  repository_dispatch:
   workflow_dispatch:
     inputs:
+      kernel_source:
+        description: "Select the kernel source"
+        required: false
+        default: "unifreq"
+        type: choice
+        options:
+          - unifreq
+          - codesnas
+      kernel_version:
+        description: "Select kernel version"
+        required: false
+        default: "5.15.162"
+        type: choice
+        options:
+          - 5.15.162
+      kernel_auto:
+        description: "Auto use the latest kernel"
+        required: false
+        default: false
+        type: boolean
+      kernel_package:
+        description: "Select compile package list"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - dtbs
+      kernel_toolchain:
+        description: "Select the compilation toolchain"
+        required: false
+        default: "gcc"
+        type: choice
+        options:
+          - clang
+          - gcc
+          - gcc-11.3
+          - gcc-12.2
+          - gcc-12.3
+          - gcc-13.2
+          - gcc-13.3
+      compress_format:
+        description: "Set the initrd compression format"
+        required: false
+        default: "xz"
+        type: choice
+        options:
+          - xz
+          - gzip
+          - zstd
+          - lzma
       kernel_sign:
         description: "Set the kernel custom signature"
         required: false
-        default: "-1-7d9483ff60109a7caf36266e8917014e"
-        type: string
+        default: "-ophub"
+        type: choice
+        options:
+          - -ophub
+          - -happy-new-year
+          - -dragon-boat-festival
+          - -mid-autumn-festival
+          - -happy-national-day
+          - -merry-christmas
+          - -spring-plowing
+          - -summer-growing
+          - -autumn-harvesting
+          - -winter-storing
+          - -yourname
       kernel_config:
         description: "Set the path of kernel .config"
         required: false
         default: "kernel-config/release/general"
-        type: string
+        type: choice
+        options:
+          - kernel-config/release/general
+          - false
 
 env:
   TZ: America/New_York
-  KERNEL_VERSION: "5.15.162"
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    if: ${{ github.event.repository.owner.id }} == ${{ github.event.sender.id }}
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Prepare environment
-      run: |
-        sudo mkdir -p /etc/apt/sources.list.d
-        echo "127.0.0.1 localhost" | sudo tee -a /etc/hosts
-        echo "::group::Disk Space Before"
-        df -h
-        echo "::endgroup::"
+      - name: Initialization environment
+        id: init
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          docker rmi $(docker images -q) 2>/dev/null
+          [[ -n "${AGENT_TOOLSDIRECTORY}" ]] && sudo rm -rf "${AGENT_TOOLSDIRECTORY}"
+          sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d /usr/local/lib/android 2>/dev/null
+          sudo swapoff -a
+          sudo rm -f /swapfile /mnt/swapfile
+          sudo -E apt-get -y update
+          sudo -E apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
+          sudo -E apt-get -y install $(curl -fsSL https://is.gd/depend_ubuntu2204_armbian)
+          sudo -E systemctl daemon-reload
+          sudo -E apt-get -y autoremove --purge
+          sudo -E apt-get clean
+          sudo sed -i '/NVM_DIR/d;/skel/d' /root/{.bashrc,.profile}
+          sudo rm -rf ~/{.cargo,.dotnet,.rustup}
+          sudo timedatectl set-timezone "${TZ}"
+          echo "status=success" >> ${GITHUB_OUTPUT}
 
-    - name: Modify and Debug armbian_compile_kernel_script.sh
-      run: |
-        script_path="./compile-kernel/tools/script/armbian_compile_kernel_script.sh"
-        
-        # 检查脚本是否存在
-        if [ ! -f "$script_path" ]; then
-          echo "Error: Script file not found at $script_path"
-          exit 1
-        fi
-        
-        # 修改脚本
-        sed -i 's/^build_kernel=(.*)$/build_kernel=("5.15.162")/' $script_path
-        sed -i 's/^auto_kernel=.*$/auto_kernel="false"/' $script_path
-        sed -i 's/^kernel_version=.*$/kernel_version="5.15.162"/' $script_path
-        
-        # 注释掉 root 用户和架构检查
-        sed -i 's/$$$$ "$(id -u)" == "0" $$$$ || error_msg/# [[ "$(id -u)" == "0" ]] || error_msg/' $script_path
-        sed -i 's/$$$$ "${arch_info}" == "aarch64" $$$$ || error_msg/# [[ "${arch_info}" == "aarch64" ]] || error_msg/' $script_path
-        
-        # 注释掉需要 root 权限的命令
-        sed -i 's/sudo apt-get/# sudo apt-get/' $script_path
-        sed -i 's/sudo -E apt-get/# sudo -E apt-get/' $script_path
-        
-        # 模拟某些环境变量
-        echo "export DEBIAN_FRONTEND=noninteractive" >> $script_path
-        echo "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" >> $script_path
-        
-        # 打印修改后的脚本内容
-        echo "Modified script contents:"
-        cat $script_path
-        
-        # 执行脚本
-        bash $script_path
-      
-    - name: Compile the kernel
-      run: |
-        echo "Simulating kernel compilation..."
-        mkdir -p output
-        echo "Dummy kernel file" > output/kernel-5.15.162-ophub.bin
-        echo "Compilation completed"
+      - name: Create simulated physical disk
+        id: disk
+        run: |
+          mnt_size=$(expr $(df -h /mnt | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 1)
+          root_size=$(expr $(df -h / | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 4)
+          sudo truncate -s "${mnt_size}"G /mnt/mnt.img
+          sudo truncate -s "${root_size}"G /root.img
+          sudo losetup /dev/loop6 /mnt/mnt.img
+          sudo losetup /dev/loop7 /root.img
+          sudo pvcreate /dev/loop6
+          sudo pvcreate /dev/loop7
+          sudo vgcreate github /dev/loop6 /dev/loop7
+          sudo lvcreate -n runner -l 100%FREE github
+          sudo mkfs.xfs /dev/github/runner
+          sudo mkdir -p /builder
+          sudo mount /dev/github/runner /builder
+          sudo chown -R runner.runner /builder
+          df -Th
 
-    - name: Upload kernel artifact
-      uses: actions/upload-artifact@v3
-      with:
-        name: kernel-5.15.162-ophub
-        path: output/kernel-5.15.162-ophub.bin
+      - name: Create a mapped directory
+        id: mapped
+        working-directory: /builder
+        run: |
+          df -hT ${PWD}
+          mkdir -p /builder/{kernel,output}
+          ln -sf /builder/kernel /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/kernel
+          ln -sf /builder/output /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output
+          echo "status=success" >> ${GITHUB_OUTPUT}
 
-    - name: Debug information
-      if: always()
-      run: |
-        echo "Kernel version: 5.15.162"
-        echo "Auto kernel: false"
-        echo "Build kernel array:"
-        grep "^build_kernel=" $script_path || echo "build_kernel not found"
-        grep "^auto_kernel=" $script_path || echo "auto_kernel not found"
-        echo "Current directory contents:"
-        ls -R
-        echo "::group::Disk Space After"
-        df -h
-        echo "::endgroup::"
+      - name: Modify build_kernel and query_version
+        run: |
+          sed -i 's/build_kernel=.*/build_kernel=("5.15.162")/' /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/tools/script/armbian_compile_kernel_script.sh
+          sed -i 's/query_version() {/query_version() {\n  kernel_version="5.15.162"/' /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/tools/script/armbian_compile_kernel_script.sh
+
+      - name: Compile the kernel [ ${{ inputs.kernel_version }} ]
+        uses: kemp-zz/amlogic-s9xxx-armbian@main
+        if: ${{ steps.mapped.outputs.status }} == 'success' && !cancelled()
+        with:
+          build_target: kernel
+          kernel_source: ${{ inputs.kernel_source }}
+          kernel_version: ${{ inputs.kernel_version }}
+          kernel_auto: ${{ inputs.kernel_auto }}
+          kernel_package: ${{ inputs.kernel_package }}
+          kernel_toolchain: ${{ inputs.kernel_toolchain }}
+          kernel_sign: ${{ inputs.kernel_sign }}
+          kernel_config: ${{ inputs.kernel_config }}
+          compress_format: ${{ inputs.compress_format }}
+
+      - name: Upload Kernel to Release
+        uses: ncipollo/release-action@main
+        if: ${{ env.PACKAGED_STATUS }} == 'success' && !cancelled()
+        with:
+          tag: kernel_stable
+          artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
+          allowUpdates: true
+          token: ${{ secrets.GITHUB_TOKEN }}
