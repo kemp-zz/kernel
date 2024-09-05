@@ -76,12 +76,19 @@ jobs:
           sudo apt-get -y install $(curl -fsSL https://is.gd/depend_ubuntu2204_armbian)
           sudo timedatectl set-timezone "${TZ}"
 
+      - name: Debug - Show directory contents
+        run: |
+          echo "Current directory: $(pwd)"
+          ls -la
+          echo "Action directory contents:"
+          ls -la ${{ github.action_path }}
+
       - name: Compile the kernel
         uses: kemp-zz/amlogic-s9xxx-armbian@main
         with:
           build_target: kernel
           kernel_version: ${{ github.event.inputs.kernel_version || '5.15.162' }}
-          kernel_auto: ${{ github.event.inputs.kernel_auto || 'false' }}
+          kernel_auto: false
           kernel_package: ${{ github.event.inputs.kernel_package || 'all' }}
           kernel_toolchain: ${{ github.event.inputs.kernel_toolchain || 'gcc' }}
           kernel_sign: ${{ github.event.inputs.kernel_sign || '-1-7d9483ff60109a7caf36266e8917014e' }}
