@@ -151,17 +151,34 @@ jobs:
       - name: Update Makefile version
         working-directory: kernel-source
         run: |
+          echo "Current directory: $(pwd)"
+          echo "Makefile content before modification:"
+          cat Makefile | grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) ='
+          
           sed -i 's/^SUBLEVEL = .*/SUBLEVEL = 162/' Makefile
-          grep '^VERSION = ' Makefile
-          grep '^PATCHLEVEL = ' Makefile
-          grep '^SUBLEVEL = ' Makefile
-          grep '^EXTRAVERSION = ' Makefile
+          
+          echo "Makefile content after modification:"
+          cat Makefile | grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) ='
+          
+          if ! grep -q '^SUBLEVEL = 162' Makefile; then
+            echo "Failed to update SUBLEVEL in Makefile"
+            exit 1
+          fi
+          
+          # Check if EXTRAVERSION exists, if not, add it
+          if ! grep -q '^EXTRAVERSION =' Makefile; then
+            echo "EXTRAVERSION not found, adding it..."
+            echo "EXTRAVERSION =" >> Makefile
+          fi
+          
+          echo "Final Makefile content:"
+          cat Makefile | grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) ='
 
       - name: Compile the kernel
         uses: ophub/amlogic-s9xxx-armbian@main
         with:
           build_target: kernel
-          kernel_source: kernel-source
+          kernel_source: ${{ github.workspace }}/kernel-source
           kernel_version: 5.15.162
           kernel_auto: false
           kernel_package: ${{ inputs.kernel_package }}
