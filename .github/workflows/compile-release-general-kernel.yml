@@ -56,6 +56,9 @@ on:
           - zstd
           - lzma
 
+env:
+  TZ: America/New_York
+
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -100,12 +103,42 @@ jobs:
         with:
           build_target: kernel
           kernel_version: ${{ github.event.inputs.kernel_version }}
-          kernel_auto: ${{ github.event.inputs.kernel_auto }}
+          kernel_auto: false
           kernel_package: ${{ github.event.inputs.kernel_package }}
           kernel_toolchain: ${{ github.event.inputs.kernel_toolchain }}
           kernel_sign: ${{ github.event.inputs.kernel_sign }}
           kernel_config: ${{ github.event.inputs.kernel_config }}
           compress_format: ${{ github.event.inputs.compress_format }}
+        env:
+          ACTIONS_STEP_DEBUG: true
+
+      - name: Check Compilation Logs
+        if: failure()
+        run: |
+          echo "Checking compilation logs..."
+          LOG_FILE="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output/compile.log"
+          if [ -f "$LOG_FILE" ]; then
+            echo "Last 100 lines of compile.log:"
+            tail -n 100 "$LOG_FILE"
+          else
+            echo "compile.log not found. Checking general output..."
+            find /home/runner/work/_actions -name "*.log" -type f -print0 | xargs -0 tail -n 50
+          fi
+          
+          echo "Disk space usage:"
+          df -h
+          
+          echo "Memory usage:"
+          free -h
+
+      - name: Upload Logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compilation-logs
+          path: |
+            /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output/*.log
+            /home/runner/work/_actions/**/*.log
 
       - name: Upload Kernel to Release
         if: ${{ env.PACKAGED_STATUS == 'success' && !cancelled() }}
@@ -121,4 +154,6 @@ jobs:
         run: |
           echo "The kernel compilation process has failed."
           echo "GitHub Action Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "Please check the 'Check Compilation Logs' step for more details."
+          echo "You can also download the compilation logs from the 'Artifacts' section of this run."
           exit 1
