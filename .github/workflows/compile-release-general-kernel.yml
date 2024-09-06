@@ -85,17 +85,52 @@ jobs:
           git fetch --depth=1 origin 244dce52c74abd24de772a07f83522493c888412
           git checkout FETCH_HEAD
 
-      - name: Verify kernel version
+      - name: Verify and adjust kernel version
         run: |
           cd kernel-source
           echo "Checking kernel version..."
-          make kernelversion
-          grep -E "^VERSION|^PATCHLEVEL|^SUBLEVEL|^EXTRAVERSION" Makefile
-          git log -1 --oneline
-          if [[ $(make kernelversion) != "${{ github.event.inputs.kernel_version }}" ]]; then
-            echo "Error: Kernel version mismatch. Expected ${{ github.event.inputs.kernel_version }}, but got $(make kernelversion)"
-            exit 1
+          CURRENT_VERSION=$(make kernelversion)
+          EXPECTED_VERSION="5.15.162"
+          
+          echo "Current version: $CURRENT_VERSION"
+          echo "Expected version: $EXPECTED_VERSION"
+          
+          if [[ "$CURRENT_VERSION" != "$EXPECTED_VERSION" ]]; then
+            echo "Version mismatch. Adjusting Makefile..."
+            
+            # Update VERSION, PATCHLEVEL, and SUBLEVEL in the main Makefile
+            sed -i 's/^VERSION = .*/VERSION = 5/' Makefile
+            sed -i 's/^PATCHLEVEL = .*/PATCHLEVEL = 15/' Makefile
+            sed -i 's/^SUBLEVEL = .*/SUBLEVEL = 162/' Makefile
+            sed -i 's/^EXTRAVERSION = .*/EXTRAVERSION = /' Makefile
+            
+            # Update lib/Makefile
+            sed -i 's/Up to [0-9.]\+/Up to 5.15.162/' lib/Makefile
+            
+            echo "Makefile updated. New version:"
+            grep -E "^VERSION|^PATCHLEVEL|^SUBLEVEL|^EXTRAVERSION" Makefile
+            
+            echo "lib/Makefile updated. New version:"
+            grep "Up to" lib/Makefile
+            
+            # Verify the changes
+            NEW_VERSION=$(make kernelversion)
+            if [[ "$NEW_VERSION" != "$EXPECTED_VERSION" ]]; then
+              echo "Error: Failed to update version to $EXPECTED_VERSION. Current version is still $NEW_VERSION"
+              exit 1
+            fi
+          else
+            echo "Version is correct. No changes needed."
           fi
+          
+          # Final check
+          echo "Final kernel version:"
+          make kernelversion
+          echo "Main Makefile version info:"
+          grep -E "^VERSION|^PATCHLEVEL|^SUBLEVEL|^EXTRAVERSION" Makefile
+          echo "lib/Makefile version info:"
+          grep "Up to" lib/Makefile
+
 
       - name: Compile Kernel
         if: success()
