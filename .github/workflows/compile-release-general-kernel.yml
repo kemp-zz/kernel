@@ -35,16 +35,6 @@ on:
           - gcc-12.3
           - gcc-13.2
           - gcc-13.3
-      compress_format:
-        description: "Set the initrd compression format"
-        required: false
-        default: "xz"
-        type: choice
-        options:
-          - xz
-          - gzip
-          - zstd
-          - lzma
       kernel_sign:
         description: "Set the kernel custom signature"
         required: false
@@ -55,9 +45,16 @@ on:
         required: false
         default: "kernel-config/release/general"
         type: string
-
-env:
-  TZ: America/New_York
+      compress_format:
+        description: "Set the initrd compression format"
+        required: false
+        default: "xz"
+        type: choice
+        options:
+          - xz
+          - gzip
+          - zstd
+          - lzma
 
 jobs:
   build:
@@ -69,60 +66,52 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Initialization environment
+        id: init
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
           sudo apt-get -y install $(curl -fsSL https://is.gd/depend_ubuntu2204_armbian)
           sudo timedatectl set-timezone "${TZ}"
+          echo "status=success" >> ${GITHUB_OUTPUT}
 
-      - name: Debug - Show directory contents
+      - name: Clone kernel source
         run: |
-          echo "Current directory: $(pwd)"
-          ls -la
-          echo "Action directory contents:"
-          ls -la ${{ github.action_path }}
+          git clone --depth 1 https://github.com/unifreq/linux-5.15.y.git -b main kernel-source
+          cd kernel-source
+          git fetch --depth=1 origin 244dce52c74abd24de772a07f83522493c888412
+          git checkout FETCH_HEAD
+
+      - name: Verify kernel version
+        run: |
+          cd kernel-source
+          echo "Checking kernel version..."
+          make kernelversion
+          grep -E "^VERSION|^PATCHLEVEL|^SUBLEVEL|^EXTRAVERSION" Makefile
+          git log -1 --oneline
+          if [[ $(make kernelversion) != "${{ github.event.inputs.kernel_version }}" ]]; then
+            echo "Error: Kernel version mismatch. Expected ${{ github.event.inputs.kernel_version }}, but got $(make kernelversion)"
+            exit 1
+          fi
 
       - name: Compile Kernel
+        if: success()
         uses: kemp-zz/amlogic-s9xxx-armbian@main
         with:
           build_target: kernel
-          kernel_version: ${{ github.event.inputs.kernel_version || '5.15.162' }}
-          kernel_auto: false
-          kernel_package: ${{ github.event.inputs.kernel_package || 'all' }}
-          kernel_toolchain: ${{ github.event.inputs.kernel_toolchain || 'gcc' }}
-          kernel_sign: ${{ github.event.inputs.kernel_sign || '-1-7d9483ff60109a7caf36266e8917014e' }}
-          kernel_config: ${{ github.event.inputs.kernel_config || 'kernel-config/release/general' }}
-          compress_format: ${{ github.event.inputs.compress_format || 'xz' }}
+          kernel_version: ${{ github.event.inputs.kernel_version }}
+          kernel_auto: ${{ github.event.inputs.kernel_auto }}
+          kernel_package: ${{ github.event.inputs.kernel_package }}
+          kernel_toolchain: ${{ github.event.inputs.kernel_toolchain }}
+          kernel_sign: ${{ github.event.inputs.kernel_sign }}
+          kernel_config: ${{ github.event.inputs.kernel_config }}
+          compress_format: ${{ github.event.inputs.compress_format }}
 
-      - name: Check Compilation Results
-        if: always()
-        run: |
-          echo "Checking compilation results..."
-          
-          # Check if the output directory exists
-          if [ -d "/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output" ]; then
-            echo "Output directory exists."
-            
-            # List contents of the output directory
-            echo "Contents of output directory:"
-            ls -R /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output
-            
-            # Check for kernel modules and their versions
-            echo "Checking kernel module versions:"
-            find /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output -name "*.ko" | xargs modinfo | grep -E "^version:" | sort | uniq
-          else
-            echo "Error: Output directory not found."
-          fi
-          
-          # Check disk usage
-          echo "Disk usage after compilation:"
-          df -h
       - name: Upload Kernel to Release
+        if: ${{ env.PACKAGED_STATUS == 'success' && !cancelled() }}
         uses: ncipollo/release-action@main
-        if: env.PACKAGED_STATUS == 'success' && !cancelled()
         with:
-          tag: kernel_${{ github.event.inputs.kernel_version || '5.15.162' }}
+          tag: kernel_${{ github.event.inputs.kernel_version }}
           artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
