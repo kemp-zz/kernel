@@ -83,7 +83,7 @@ jobs:
           echo "Action directory contents:"
           ls -la ${{ github.action_path }}
 
-      - name: Compile the kernel
+      - name: Compile Kernel
         uses: kemp-zz/amlogic-s9xxx-armbian@main
         with:
           build_target: kernel
@@ -95,6 +95,29 @@ jobs:
           kernel_config: ${{ github.event.inputs.kernel_config || 'kernel-config/release/general' }}
           compress_format: ${{ github.event.inputs.compress_format || 'xz' }}
 
+      - name: Check Compilation Results
+        if: always()
+        run: |
+          echo "Checking compilation results..."
+          
+          # Check if the output directory exists
+          if [ -d "/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output" ]; then
+            echo "Output directory exists."
+            
+            # List contents of the output directory
+            echo "Contents of output directory:"
+            ls -R /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output
+            
+            # Check for kernel modules and their versions
+            echo "Checking kernel module versions:"
+            find /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output -name "*.ko" | xargs modinfo | grep -E "^version:" | sort | uniq
+          else
+            echo "Error: Output directory not found."
+          fi
+          
+          # Check disk usage
+          echo "Disk usage after compilation:"
+          df -h
       - name: Upload Kernel to Release
         uses: ncipollo/release-action@main
         if: env.PACKAGED_STATUS == 'success' && !cancelled()
