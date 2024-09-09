@@ -1,18 +1,40 @@
+#==========================================================================
+# Description: Compile release general kernel
+# Copyright (C) 2021 https://github.com/unifreq/openwrt_packit
+# Copyright (C) 2021 https://github.com/ophub/kernel
+#==========================================================================
+
 name: Compile release general kernel
 
 on:
   repository_dispatch:
   workflow_dispatch:
     inputs:
+      kernel_source:
+        description: "Select the kernel source"
+        required: false
+        default: "unifreq"
+        type: choice
+        options:
+          - unifreq
+          - codesnas
       kernel_version:
         description: "Select kernel version"
         required: false
-        default: "5.15.162"
-        type: string
+        default: "6.6.y"
+        type: choice
+        options:
+          - 5.4.y
+          - 5.10.y
+          - 5.15.y
+          - 6.1.y
+          - 6.6.y
+          - 6.1.y_6.6.y
+          - 5.15.y_5.10.y
       kernel_auto:
         description: "Auto use the latest kernel"
         required: false
-        default: false
+        default: true
         type: boolean
       kernel_package:
         description: "Select compile package list"
@@ -35,16 +57,6 @@ on:
           - gcc-12.3
           - gcc-13.2
           - gcc-13.3
-      kernel_sign:
-        description: "Set the kernel custom signature"
-        required: false
-        default: "-1-7d9483ff60109a7caf36266e8917014e"
-        type: string
-      kernel_config:
-        description: "Set the path of kernel .config"
-        required: false
-        default: "kernel-config/release/general"
-        type: string
       compress_format:
         description: "Set the initrd compression format"
         required: false
@@ -55,6 +67,31 @@ on:
           - gzip
           - zstd
           - lzma
+      kernel_sign:
+        description: "Set the kernel custom signature"
+        required: false
+        default: "-ophub"
+        type: choice
+        options:
+          - -ophub
+          - -happy-new-year
+          - -dragon-boat-festival
+          - -mid-autumn-festival
+          - -happy-national-day
+          - -merry-christmas
+          - -spring-plowing
+          - -summer-growing
+          - -autumn-harvesting
+          - -winter-storing
+          - -yourname
+      kernel_config:
+        description: "Set the path of kernel .config"
+        required: false
+        default: "kernel-config/release/general"
+        type: choice
+        options:
+          - kernel-config/release/general
+          - false
 
 env:
   TZ: America/New_York
@@ -62,7 +99,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    if: ${{ github.event.repository.owner.id == github.event.sender.id }}
+    if: ${{ github.event.repository.owner.id }} == ${{ github.event.sender.id }}
 
     steps:
       - name: Checkout
@@ -73,122 +110,77 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update
-          sudo apt-get -y install $(curl -fsSL https://is.gd/depend_ubuntu2204_armbian)
+          docker rmi $(docker images -q) 2>/dev/null
+          [[ -n "${AGENT_TOOLSDIRECTORY}" ]] && sudo rm -rf "${AGENT_TOOLSDIRECTORY}"
+          sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d /usr/local/lib/android 2>/dev/null
+          sudo swapoff -a
+          sudo rm -f /swapfile /mnt/swapfile
+          sudo -E apt-get -y update
+          sudo -E apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
+          sudo -E apt-get -y install $(curl -fsSL https://is.gd/depend_ubuntu2204_armbian)
+          sudo -E systemctl daemon-reload
+          #sudo -E apt-get -y full-upgrade
+          sudo -E apt-get -y autoremove --purge
+          sudo -E apt-get clean
+          sudo sed -i '/NVM_DIR/d;/skel/d' /root/{.bashrc,.profile}
+          sudo rm -rf ~/{.cargo,.dotnet,.rustup}
           sudo timedatectl set-timezone "${TZ}"
           echo "status=success" >> ${GITHUB_OUTPUT}
 
-      - name: Clone kernel source
+      - name: Create simulated physical disk
+        id: disk
         run: |
-          git clone --depth 1 https://github.com/unifreq/linux-5.15.y.git -b main kernel-source
-          cd kernel-source
-          git fetch --depth=1 origin 244dce52c74abd24de772a07f83522493c888412
-          git checkout FETCH_HEAD
+          mnt_size=$(expr $(df -h /mnt | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 1)
+          root_size=$(expr $(df -h / | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 4)
+          sudo truncate -s "${mnt_size}"G /mnt/mnt.img
+          sudo truncate -s "${root_size}"G /root.img
+          sudo losetup /dev/loop6 /mnt/mnt.img
+          sudo losetup /dev/loop7 /root.img
+          sudo pvcreate /dev/loop6
+          sudo pvcreate /dev/loop7
+          sudo vgcreate github /dev/loop6 /dev/loop7
+          sudo lvcreate -n runner -l 100%FREE github
+          sudo mkfs.xfs /dev/github/runner
+          sudo mkdir -p /builder
+          sudo mount /dev/github/runner /builder
+          sudo chown -R runner.runner /builder
+          df -Th
 
-      - name: Verify and adjust kernel version
+      - name: Create a mapped directory
+        id: mapped
+        working-directory: /builder
         run: |
-          cd kernel-source
-          echo "Checking kernel version..."
-          CURRENT_VERSION=$(make kernelversion)
-          EXPECTED_VERSION="5.15.162"
-          
-          echo "Current version: $CURRENT_VERSION"
-          echo "Expected version: $EXPECTED_VERSION"
-          
-          if [[ "$CURRENT_VERSION" != "$EXPECTED_VERSION" ]]; then
-            echo "Version mismatch. Adjusting Makefile..."
-            
-            # Update VERSION, PATCHLEVEL, and SUBLEVEL in the main Makefile
-            sed -i 's/^VERSION = .*/VERSION = 5/' Makefile
-            sed -i 's/^PATCHLEVEL = .*/PATCHLEVEL = 15/' Makefile
-            sed -i 's/^SUBLEVEL = .*/SUBLEVEL = 162/' Makefile
-            sed -i 's/^EXTRAVERSION = .*/EXTRAVERSION = /' Makefile
-            
-            # Update lib/Makefile
-            sed -i 's/Up to [0-9.]\+/Up to 5.15.162/' lib/Makefile
-            
-            echo "Makefile updated. New version:"
-            grep -E "^VERSION|^PATCHLEVEL|^SUBLEVEL|^EXTRAVERSION" Makefile
-            
-            echo "lib/Makefile updated. New version:"
-            grep "Up to" lib/Makefile
-            
-            # Verify the changes
-            NEW_VERSION=$(make kernelversion)
-            if [[ "$NEW_VERSION" != "$EXPECTED_VERSION" ]]; then
-              echo "Error: Failed to update version to $EXPECTED_VERSION. Current version is still $NEW_VERSION"
-              exit 1
-            fi
-          else
-            echo "Version is correct. No changes needed."
-          fi
-          
-          # Final check
-          echo "Final kernel version:"
-          make kernelversion
-          echo "Main Makefile version info:"
-          grep -E "^VERSION|^PATCHLEVEL|^SUBLEVEL|^EXTRAVERSION" Makefile
-          echo "lib/Makefile version info:"
-          grep "Up to" lib/Makefile
+          df -hT ${PWD}
+          mkdir -p /builder/{kernel,output}
+          ln -sf /builder/kernel /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/kernel
+          ln -sf /builder/output /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output
+          echo "status=success" >> ${GITHUB_OUTPUT}
 
-
-      - name: Compile Kernel
-        if: success()
+      - name: Compile the kernel [ ${{ inputs.kernel_version }} ]
         uses: kemp-zz/amlogic-s9xxx-armbian@main
+        if: ${{ steps.mapped.outputs.status }} == 'success' && !cancelled()
         with:
           build_target: kernel
-          kernel_version: ${{ github.event.inputs.kernel_version }}
-          kernel_auto: false
-          kernel_package: ${{ github.event.inputs.kernel_package }}
-          kernel_toolchain: ${{ github.event.inputs.kernel_toolchain }}
-          kernel_sign: ${{ github.event.inputs.kernel_sign }}
-          kernel_config: ${{ github.event.inputs.kernel_config }}
-          compress_format: ${{ github.event.inputs.compress_format }}
-        env:
-          ACTIONS_STEP_DEBUG: true
-
-      - name: Check Compilation Logs
-        if: failure()
-        run: |
-          echo "Checking compilation logs..."
-          LOG_FILE="/home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output/compile.log"
-          if [ -f "$LOG_FILE" ]; then
-            echo "Last 100 lines of compile.log:"
-            tail -n 100 "$LOG_FILE"
-          else
-            echo "compile.log not found. Checking general output..."
-            find /home/runner/work/_actions -name "*.log" -type f -print0 | xargs -0 tail -n 50
-          fi
-          
-          echo "Disk space usage:"
-          df -h
-          
-          echo "Memory usage:"
-          free -h
-
-      - name: Upload Logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: compilation-logs
-          path: |
-            /home/runner/work/_actions/kemp-zz/amlogic-s9xxx-armbian/main/compile-kernel/output/*.log
-            /home/runner/work/_actions/**/*.log
+          kernel_source: ${{ inputs.kernel_source }}
+          kernel_version: ${{ inputs.kernel_version }}
+          kernel_auto: ${{ inputs.kernel_auto }}
+          kernel_package: ${{ inputs.kernel_package }}
+          kernel_toolchain: ${{ inputs.kernel_toolchain }}
+          kernel_sign: ${{ inputs.kernel_sign }}
+          kernel_config: ${{ inputs.kernel_config }}
+          compress_format: ${{ inputs.compress_format }}
 
       - name: Upload Kernel to Release
-        if: ${{ env.PACKAGED_STATUS == 'success' && !cancelled() }}
         uses: ncipollo/release-action@main
+        if: ${{ env.PACKAGED_STATUS }} == 'success' && !cancelled()
         with:
-          tag: kernel_${{ github.event.inputs.kernel_version }}
+          tag: kernel_stable
           artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Notification of build failure
-        if: failure()
-        run: |
-          echo "The kernel compilation process has failed."
-          echo "GitHub Action Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          echo "Please check the 'Check Compilation Logs' step for more details."
-          echo "You can also download the compilation logs from the 'Artifacts' section of this run."
-          exit 1
+          body: |
+            - The kernel can be used to compile Armbian and OpenWrt.
+            - The kernel source code comes from: ${{ inputs.kernel_source }}
+            - The kernel compilation toolchain: ${{ inputs.kernel_toolchain }}
+            - This is a `stable` kernel, which can be used in Armbian and OpenWrt.
+            - 这是`稳定版`内核，可以在 Armbian 和 OpenWrt 里使用。
