@@ -1,35 +1,22 @@
+#========== Compile release general kernel
+# Copyright (C) 2021://github.com/unifreq/openwrt_packit
+# Copyright (C) 2021 https://github.comub/kernel
+#==========================================================================
+
 name: Compile release general kernel
 
 on:
   repository_dispatch:
   workflow_dispatch:
     inputs:
-      kernel_source:
-        description: "Select the kernel source"
-        required: false
-        default: "unifreq"
-        type: choice
-        options:
-          - unifreq
-          - codesnas
       kernel_version:
-        description: "Select kernel version"
-        required: false
-        default: "5.15.y"
-        type: choice
-        options:
-          - 5.4.y
-          - 5.10.y
-          - 5.15.y
-          - 6.1.y
-          - 6.6.y
-          - 6.1.y_6.6.y
-          - 5.15.y_5.10.y
-      kernel_auto:
-        description: "Auto use the latest kernel"
-        required: false
-        default: false
-        type: boolean
+        description: "Kernel version to compile"
+        required: true
+        default: "5.15.162"
+      kernel_commit:
+        description: "Kernel commit to use"
+        required: true
+        default: "244dce52c74abd24de772a07f83522493c888412"
       kernel_package:
         description: "Select compile package list"
         required: false
@@ -54,7 +41,7 @@ on:
       compress_format:
         description: "Set the initrd compression format"
         required: false
-        default: "xz"
+        default:z"
         type: choice
         options:
           - xz
@@ -96,7 +83,7 @@ jobs:
     if: ${{ github.event.repository.owner.id }} == ${{ github.event.sender.id }}
 
     steps:
-      - name:
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Initialization environment
@@ -105,12 +92,12 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           docker rmi $(docker images -q) 2>/dev/null
-          [[ -n "${AGENT_TOOLSDIRECTORY}" ]] && sudo rm -rf "${AGENT_TOOL
-          sudo rm -rf /usr/share/dotnet /etc/apt/sources.list/local/lib/android 2>/dev/null
+          [[ -n "${AGENT_TOOLSDIRECTORY}" ]] && sudo rm -rf "${AGENT_TOOLSDIRECTORY}"
+          sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d /usr/local/lib/android 2>/dev/null
           sudo swapoff -a
-          sudo rm -f /swmnt/swapfile
+          sudo rm -f /swapfile /nt/swapfile
           sudo -E apt-get -y update
-          -get -y purge azure-cli ghc* zulu* llvm* firefox* dotnet* powershell openjdk* mongodb* moby* || true
+          sudo -E apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
           sudo -E apt-get -y install $(curl -fsSL https://is.gd/depend_ubuntu2204_armbian)
           sudo -E systemctl daemon-reload
           sudo -E apt-get -y autoremove --purge
@@ -131,12 +118,11 @@ jobs:
           sudo losetup /dev/loop7 /root.img
           sudo pvcreate /dev/loop6
           sudo pvcreate /dev/loop7
-          sudo vgcreate github /dev/loop6 /dev/loop7
-          sudo lvcreate -n runner -l 100%FREE github
+          sudo vgcreate github /dev/loop6 /dev/loop7vcreate -n runner -l 100%FREE github
           sudo mkfs.xfs /dev/github/runner
           sudo mkdir -p /builder
           sudo mount /dev/github/runner /builder
-          sudo chown -R runner.
+          sudo chown -R runner.runner /builder
           df -Th
 
       - name: Create a mapped directory
@@ -145,25 +131,16 @@ jobs:
         run: |
           df -hT ${PWD}
           mkdir -p /builder/{kernel,output}
-          ln -sf /builder/kernel /home/runner/work/_/amlogic-s9xxx-armbian/main/compile-kernel/kernel
+          ln -sf /builder/kernel /home/runner/work/_ub/amlogic-s9xxx-armbian/main/compile-kernel/kernel
           ln -sf /builder/output /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/output
           echo "status=success" >> ${GITHUB_OUTPUT}
 
-      - name: Checkout specific kernel version
-        if: ${{ inputs.kernel_version == '5.15.y' }}
-        run: |
-          cd /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/kernel/
-          git clone --depth 1 https://github.com/unifreq/linux-5.15.y.git .
-          git fetch origin 244dce52c74abd24de772a07f83522493c888412
-          git checkout 244dce52c74abd24de772a07f83522493c888412
-          git log -1 --oneline
-
-      - name: Compile the kernel [ ${{ inputs.kernel_version }} ]
-        uses: ophub/amlogic-s9xxx-armbian@main
+      - name: Compile the kernel
+        uses: ophic-s9xxx-armbian@main
         if: ${{ steps.mapped.outputs.status }} == 'success' && !cancelled()
         with:
           build_target: kernel
-          kernel_source: ${{ inputs.kernel_source }}
+          kernel_source: unifreq
           kernel_version: ${{ inputs.kernel_version }}
           kernel_auto: false
           kernel_package: ${{ inputs.kernel_package }}
@@ -172,11 +149,17 @@ jobs:
           kernel_config: ${{ inputs.kernel_config }}
           compress_format: ${{ inputs.compress_format }}
 
+      - name: Checkout specific kernel commit
+        working-directory: /builder/kernel/linux-5.15.y
+        run: |
+          git fetch --all
+          git checkout ${{ inputs.kernel_commit }}
+
       - name: Upload Kernel to Release
         uses: ncipollo/release-action@main
         if: ${{ env.PACKAGED_STATUS }} == 'success' && !cancelled()
         with:
-          tag: kernel_stable
+          tag: kernel_${{ inputs.kernel_version }}
           artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
