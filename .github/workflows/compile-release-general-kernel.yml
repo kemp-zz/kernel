@@ -142,7 +142,8 @@ jobs:
       - name: Create a mapped directory
         id: mapped
         working-directory: /builder
-        rundf -hT ${PWD}
+          run:|
+          df -hT ${PWD}
           mkdir -p /builder/{kernel,output}
           ln -sf /builder/kernel /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/kernel
           ln -sf /builder/output /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/output
