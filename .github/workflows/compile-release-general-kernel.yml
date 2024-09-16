@@ -21,9 +21,9 @@ on:
           - 5.4.y
           - 5.10.y
           - 5.15.y
-          - 6.1.y
+          .1.y
           - 6.6.y
-          - 6.1.y_.6.y
+          - 6.1.y_6.6.y
           - 5.15.y_5.10.y
       kernel_auto:
         description: "Auto use the latest kernel"
@@ -53,8 +53,7 @@ on:
           - gcc-13.3
       compress_format:
         description: "Set the initrd compression format"
-        required: false
-        default: "xz"
+        required: falsexz"
         type: choice
         options:
           - xz
@@ -79,9 +78,8 @@ on:
           - -winter-storing
           - -yourname
       kernel_config:
-        description: "Set the path of .config"
-        required: false
-        default: "-config/release/general"
+        description: "Set the path of kernel .config"
+        required:: "kernel-config/release/general"
         type: choice
         options:
           - kernel-config/release/general
@@ -93,10 +91,10 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    if: ${{ github.event.owner.id }} == ${{ github.event.sender.id }}
+    if: ${{ github.event.repository.owner.id }} == ${{ github.event.sender.id }}
 
     steps:
-      - name: Checkout
+      - name:
         uses: actions/checkout@v4
 
       - name: Initialization environment
@@ -105,17 +103,17 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           docker rmi $(docker images -q) 2>/dev/null
-          [[ -n "${AGENT_TOOLSDIRECTORY}" ]] && sudo rm -rf "${AGENT_TOOLSDIRECTORY}"
-          sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d /usr/local/lib/android 2>/dev/null
+          [[ -n "${AGENT_TOOLSDIRECTORY}" ]] && sudo rm -rf "${AGENT_TOOL
+          sudo rm -rf /usr/share/dotnet /etc/apt/sources.list/local/lib/android 2>/dev/null
           sudo swapoff -a
-          sudo rm -f /swapfile /mnt/swapfile
+          sudo rm -f /swmnt/swapfile
           sudo -E apt-get -y update
-          sudo -E apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
+          -get -y purge azure-cli ghc* zulu* llvm* firefox* dotnet* powershell openjdk* mongodb* moby* || true
           sudo -E apt-get -y install $(curl -fsSL https://is.gd/depend_ubuntu2204_armbian)
           sudo -E systemctl daemon-reload
           sudo -E apt-get -y autoremove --purge
           sudo -E apt-get clean
-          sudo sed -i '/NVM_DIR/d;/s/d' /root/{.bashrc,.profile}
+          sudo sed -i '/NVM_DIR/d;/skel/d' /root/{.bashrc,.profile}
           sudo rm -rf ~/{.cargo,.dotnet,.rustup}
           sudo timedatectl set-timezone "${TZ}"
           echo "status=success" >> ${GITHUB_OUTPUT}
@@ -124,8 +122,8 @@ jobs:
         id: disk
         run: |
           mnt_size=$(expr $(df -h /mnt | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 1)
-          root_size=$(expr $(df -h / | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 4)
-          suate -s "${mnt_size}"G /mnt/mnt.img
+          root_size=$(expr $(df -h / | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 4)
+          sudo truncate -s "${mnt_size}"G /mnt/mnt.img
           sudo truncate -s "${root_size}"G /root.img
           sudo losetup /dev/loop6 /mnt/mnt.img
           sudo losetup /dev/loop7 /root.img
@@ -133,19 +131,19 @@ jobs:
           sudo pvcreate /dev/loop7
           sudo vgcreate github /dev/loop6 /dev/loop7
           sudo lvcreate -n runner -l 100%FREE github
-          xfs /dev/github/runner
+          sudo mkfs.xfs /dev/github/runner
           sudo mkdir -p /builder
           sudo mount /dev/github/runner /builder
-          sudo chown -R runner.runner /builder
+          sudo chown -R runner.
           df -Th
 
       - name: Create a mapped directory
         id: mapped
         working-directory: /builder
-          run:|
+        run: |
           df -hT ${PWD}
           mkdir -p /builder/{kernel,output}
-          ln -sf /builder/kernel /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/kernel
+          ln -sf /builder/kernel /home/runner/work/_/amlogic-s9xxx-armbian/main/compile-kernel/kernel
           ln -sf /builder/output /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/output
           echo "status=success" >> ${GITHUB_OUTPUT}
 
@@ -164,7 +162,7 @@ jobs:
         with:
           build_target: kernel
           kernel_source: ${{ inputs.kernel_source }}
-          kernel_version: ${{ inputskernel_version }}
+          kernel_version: ${{ inputs.kernel_version }}
           kernel_auto: false
           kernel_package: ${{ inputs.kernel_package }}
           kernel_toolchain: ${{ inputs.kernel_toolchain }}
