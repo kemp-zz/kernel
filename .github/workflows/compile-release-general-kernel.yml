@@ -41,7 +41,7 @@ on:
       compress_format:
         description: "Set the initrd compression format"
         required: false
-        default:z"
+        default: "xz"
         type: choice
         options:
           - xz
