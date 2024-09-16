@@ -60,7 +60,7 @@ on:
           - xz
           - gzip
           - zstd
-          -zma
+          - lzma
       kernel_sign:
         description: "Set the kernel custom signature"
         required: false
