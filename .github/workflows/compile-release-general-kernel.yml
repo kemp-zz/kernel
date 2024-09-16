@@ -149,7 +149,7 @@ jobs:
           ln -sf /builder/output /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/output
           echo "status=success" >> ${GITHUB_OUTPUT}
 
-      - name specific kernel version
+      - name: Checkout specific kernel version
         if: ${{ inputs.kernel_version == '5.15.y' }}
         run: |
           cd /home/runner/work/_actions/ophub/amlogic-s9xxx-armbian/main/compile-kernel/kernel/
@@ -164,9 +164,9 @@ jobs:
         with:
           build_target: kernel
           kernel_source: ${{ inputs.kernel_source }}
-          kernel_version: ${{ inputs.kernel_version }}
+          kernel_version: ${{ inputskernel_version }}
           kernel_auto: false
-          kernel_ inputs.kernel_package }}
+          kernel_package: ${{ inputs.kernel_package }}
           kernel_toolchain: ${{ inputs.kernel_toolchain }}
           kernel_sign: ${{ inputs.kernel_sign }}
           kernel_config: ${{ inputs.kernel_config }}
