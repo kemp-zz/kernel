@@ -53,7 +53,8 @@ on:
           - gcc-13.3
       compress_format:
         description: "Set the initrd compression format"
-        required: falsexz"
+        required: false
+        default: "xz"
         type: choice
         options:
           - xz
@@ -79,7 +80,8 @@ on:
           - -yourname
       kernel_config:
         description: "Set the path of kernel .config"
-        required:: "kernel-config/release/general"
+        required: false
+        default: "kernel-config/release/general"
         type: choice
         options:
           - kernel-config/release/general
